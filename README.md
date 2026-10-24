@@ -128,6 +128,17 @@ ui-expense-wiki/
 
 ---
 
+## Expense statistics
+
+The statistics endpoint returns `byCategory` as a recursive hierarchy. Each category
+has `categoryId`, `categoryName`, `total`, nullable `parentTotal`, and a
+`subCategories` array (empty for leaves). The breakdown shows category names and
+expense amounts, with branches collapsed by default. Use each parent's chevron
+control to expand or collapse its subcategories at any depth. Colored folder
+and tag icons distinguish groups and leaves; children inherit their group's
+color. Child amounts are not added again to the summary totals. Budget and
+percentage fields are not required from the API.
+
 ## Budgets
 
 `/budgets` provides searchable cards and a table with current-period allocation,

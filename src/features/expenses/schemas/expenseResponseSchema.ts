@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ExpenseCategoryStatistic } from '../types'
 
 const numericValue = z.union([
   z.number(),
@@ -48,6 +49,14 @@ export const expensePageResponseSchema = z.object({
   totalPages: page.totalPages,
 }))
 
+const expenseCategoryStatisticSchema: z.ZodType<ExpenseCategoryStatistic> = z.object({
+  categoryId: numericValue.pipe(z.number().int().positive()),
+  categoryName: z.string(),
+  total: numericValue,
+  parentTotal: numericValue.nullable(),
+  subCategories: z.array(z.lazy(() => expenseCategoryStatisticSchema)),
+})
+
 export const expenseStatisticsResponseSchema = z.object({
   totalExpenses: numericValue,
   totalPaid: numericValue,
@@ -55,11 +64,5 @@ export const expenseStatisticsResponseSchema = z.object({
   totalOverdue: numericValue,
   overdueCount: pageNumber,
   pendingCount: pageNumber,
-  byCategory: z.array(z.object({
-    categoryId: numericValue.pipe(z.number().int().positive()),
-    categoryName: z.string(),
-    total: numericValue,
-    budget: numericValue,
-    percentage: numericValue,
-  })),
+  byCategory: z.array(expenseCategoryStatisticSchema),
 })

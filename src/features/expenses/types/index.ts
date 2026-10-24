@@ -54,8 +54,8 @@ export interface ExpenseCategoryStatistic {
   categoryId: number
   categoryName: string
   total: number
-  budget: number
-  percentage: number
+  parentTotal: number | null
+  subCategories: ExpenseCategoryStatistic[]
 }
 
 export interface ExpenseStatisticsResponse {

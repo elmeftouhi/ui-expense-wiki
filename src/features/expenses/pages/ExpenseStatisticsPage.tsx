@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ChartNoAxesCombined } from 'lucide-react'
+import { ArrowLeft, ChartNoAxesCombined, ChevronDown, ChevronRight, Folder, FolderOpen, Tag } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useActiveTenant } from '@/features/tenants'
 import { formatCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useExpenseStatistics } from '../hooks/useExpenses'
-import type { ExpenseStatisticsFilters } from '../types'
+import type { ExpenseCategoryStatistic, ExpenseStatisticsFilters } from '../types'
 
 function dateOnly(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -19,6 +19,57 @@ function initialRange(): ExpenseStatisticsFilters {
     startDate: dateOnly(new Date(today.getFullYear(), today.getMonth(), 1)),
     endDate: dateOnly(today),
   }
+}
+
+const categoryColors = [
+  'bg-blue-500/10 text-blue-700 dark:text-blue-300',
+  'bg-teal-500/10 text-teal-700 dark:text-teal-300',
+  'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+]
+
+function CategoryRow({ category, amount, color, depth = 0 }: {
+  category: ExpenseCategoryStatistic
+  amount: (value: number) => string
+  color: string
+  depth?: number
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const hasChildren = category.subCategories.length > 0
+  const Icon = hasChildren ? (expanded ? FolderOpen : Folder) : Tag
+  const Chevron = expanded ? ChevronDown : ChevronRight
+  const label = (
+    <>
+      <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${color}`}>
+        <Icon aria-hidden="true" className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 break-words">{category.categoryName}</span>
+    </>
+  )
+
+  return (
+    <>
+      <tr className={depth === 0 ? 'hover:bg-muted/40' : 'bg-muted/20 hover:bg-muted/40'}>
+        <td className="py-3 pr-4 font-medium" style={{ paddingLeft: `${depth * 1.5}rem` }}>
+          {hasChildren ? (
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${category.categoryName}`}
+              onClick={() => setExpanded((current) => !current)}
+              className="flex w-full items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Chevron aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {label}
+            </button>
+          ) : <div className="flex items-center gap-2 pl-6">{label}</div>}
+        </td>
+        <td className="whitespace-nowrap py-3 pr-4 text-right tabular-nums">{amount(category.total)}</td>
+      </tr>
+      {expanded && category.subCategories.map((child) => (
+        <CategoryRow key={child.categoryId} category={child} amount={amount} color={color} depth={depth + 1} />
+      ))}
+    </>
+  )
 }
 
 export function ExpenseStatisticsPage() {
@@ -64,19 +115,15 @@ export function ExpenseStatisticsPage() {
           </section>
           <Card>
             <CardContent className="p-5">
-              <div className="mb-4"><h2 className="text-lg font-semibold">By category</h2><p className="mt-1 text-sm text-muted-foreground">Amounts and budget share in the selected period.</p></div>
+              <div className="mb-4"><h2 className="text-lg font-semibold">By category</h2><p className="mt-1 text-sm text-muted-foreground">Expand a category to see its subcategories.</p></div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px] text-left text-sm">
-                  <thead className="border-b border-border text-xs text-muted-foreground"><tr><th className="py-3 pr-4 font-medium">Category</th><th className="py-3 pr-4 text-right font-medium">Expenses</th><th className="py-3 pr-4 text-right font-medium">Budget</th><th className="py-3 pr-4 text-right font-medium">Share</th><th className="w-32 py-3 font-medium">Progress</th></tr></thead>
-                  <tbody className="divide-y divide-border/70">
-                    {stats.data.byCategory.map((category) => <tr key={category.categoryId}>
-                      <td className="py-3 pr-4 font-medium">{category.categoryName}</td>
-                      <td className="whitespace-nowrap py-3 pr-4 text-right tabular-nums">{amount(category.total)}</td>
-                      <td className="whitespace-nowrap py-3 pr-4 text-right tabular-nums">{amount(category.budget)}</td>
-                      <td className="py-3 pr-4 text-right tabular-nums">{category.percentage.toLocaleString(activeTenant.locale, { maximumFractionDigits: 1 })}%</td>
-                      <td className="py-3"><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(0, Math.min(category.percentage, 100))}%` }} /></div></td>
-                    </tr>)}
-                    {stats.data.byCategory.length === 0 && <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">No category expenses in this date range.</td></tr>}
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-border text-xs text-muted-foreground"><tr><th className="py-3 pr-4 font-medium">Category</th><th className="py-3 pr-4 text-right font-medium">Expenses</th></tr></thead>
+                  <tbody key={`${activeTenant.id}-${range.startDate}-${range.endDate}`} className="divide-y divide-border/70">
+                    {stats.data.byCategory.map((category, index) => (
+                      <CategoryRow key={category.categoryId} category={category} amount={amount} color={categoryColors[index % categoryColors.length]} />
+                    ))}
+                    {stats.data.byCategory.length === 0 && <tr><td colSpan={2} className="py-12 text-center text-muted-foreground">No category expenses in this date range.</td></tr>}
                   </tbody>
                 </table>
               </div>

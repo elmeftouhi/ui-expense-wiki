@@ -8,7 +8,7 @@ import { ExpenseFormPage } from '../pages/ExpenseFormPage'
 import { ExpensesPage } from '../pages/ExpensesPage'
 import { useExpenses } from '../hooks/useExpenses'
 import { ExpenseStatisticsPage } from '../pages/ExpenseStatisticsPage'
-import { expense } from './expenseFixtures'
+import { expense, expenseStatistics } from './expenseFixtures'
 
 const mocks = vi.hoisted(() => ({
   changeStatus: vi.fn(),
@@ -79,26 +79,26 @@ beforeEach(() => {
   mocks.stats = {
     isLoading: false,
     error: null,
-    data: {
-      totalExpenses: 82.5,
-      totalPaid: 0,
-      totalPending: 82.5,
-      totalOverdue: 0,
-      overdueCount: 0,
-      pendingCount: 1,
-      byCategory: [{ categoryId: 3, categoryName: 'Utilities', total: 82.5, budget: 100, percentage: 82.5 }],
-    },
+    data: expenseStatistics,
     refetch: vi.fn(),
   }
 })
 
 describe('expense UI', () => {
-  it('filters expenses by payment method and clears the filter with Reset', async () => {
+  it('defaults to the current month and 25 rows, and clears payment method without Reset', async () => {
     const user = userEvent.setup()
     render(<MemoryRouter><ExpensesPage /></MemoryRouter>)
+    const now = new Date()
+    expect(screen.getByRole('combobox', { name: 'Year' })).toHaveValue(String(now.getFullYear()))
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveValue(String(now.getMonth() + 1))
+    expect(screen.getByRole('combobox', { name: 'Rows per page' })).toHaveValue('25')
+    expect(useExpenses).toHaveBeenLastCalledWith(expect.objectContaining({
+      year: now.getFullYear(), month: now.getMonth() + 1, size: 25, page: 0,
+    }))
+    expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument()
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by payment method' }), '2')
     expect(useExpenses).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethodId: 2, page: 0 }))
-    await user.click(screen.getByRole('button', { name: 'Reset' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by payment method' }), '')
     expect(useExpenses).toHaveBeenLastCalledWith(expect.not.objectContaining({ paymentMethodId: 2 }))
     expect(screen.getByRole('combobox', { name: 'Filter by payment method' })).toHaveValue('')
   })
@@ -407,6 +407,62 @@ describe('expense UI', () => {
     expect(screen.getByRole('heading', { name: 'Expense statistics' })).toBeInTheDocument()
     expect(screen.getByText('By category')).toBeInTheDocument()
     expect(screen.getByText('Utilities')).toBeInTheDocument()
-    expect(screen.getByText('82.5%')).toBeInTheDocument()
+    expect(screen.getByText('$1,885.00')).toBeInTheDocument()
+    const table = screen.getByRole('table')
+    expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent))
+      .toEqual(['Category', 'Expenses'])
+    expect(within(table).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[0].textContent))
+      .toEqual(['Food', 'Transport', 'Utilities'])
+    expect(screen.getByRole('button', { name: 'Expand Food' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Groceries')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Expand Utilities' })).not.toBeInTheDocument()
+  })
+
+  it('expands and collapses categories independently with keyboard controls', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><ExpenseStatisticsPage /></MemoryRouter>)
+    screen.getByRole('button', { name: 'Expand Food' }).focus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('button', { name: 'Collapse Food' })).toHaveAttribute('aria-expanded', 'true')
+    const groceries = screen.getByRole('row', { name: /^Groceries / })
+    expect(within(groceries).getByText('$420.00')).toBeInTheDocument()
+    expect(within(groceries).getAllByRole('cell')[0]).toHaveStyle({ paddingLeft: '1.5rem' })
+    expect(screen.queryByText('Fuel')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Expand Transport' }))
+    await user.click(screen.getByRole('button', { name: 'Collapse Food' }))
+    expect(screen.queryByText('Groceries')).not.toBeInTheDocument()
+    expect(screen.queryByText('Restaurants')).not.toBeInTheDocument()
+    expect(screen.getByText('Fuel')).toBeInTheDocument()
+  })
+
+  it('expands nested subcategories and hides descendants when their parent collapses', async () => {
+    const user = userEvent.setup()
+    mocks.stats.data = {
+      ...expenseStatistics,
+      totalExpenses: 0,
+      byCategory: [{
+        categoryId: 10, categoryName: 'Food', total: 0, parentTotal: null,
+        subCategories: [{
+          categoryId: 11, categoryName: 'Groceries', total: 0, parentTotal: 0,
+          subCategories: [{ categoryId: 13, categoryName: 'Produce', total: 0, parentTotal: 0, subCategories: [] }],
+        }],
+      }],
+    }
+    render(<MemoryRouter><ExpenseStatisticsPage /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: 'Expand Food' }))
+    expect(screen.queryByText('Produce')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Expand Groceries' }))
+    const produce = screen.getByRole('row', { name: /^Produce / })
+    expect(within(produce).getAllByRole('cell')[0]).toHaveStyle({ paddingLeft: '3rem' })
+    expect(within(produce).getByText('$0.00')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Collapse Food' }))
+    expect(screen.queryByText('Groceries')).not.toBeInTheDocument()
+    expect(screen.queryByText('Produce')).not.toBeInTheDocument()
+  })
+
+  it('shows an empty category breakdown', () => {
+    mocks.stats.data = { ...expenseStatistics, byCategory: [] }
+    render(<MemoryRouter><ExpenseStatisticsPage /></MemoryRouter>)
+    expect(screen.getByText('No category expenses in this date range.')).toBeInTheDocument()
   })
 })

@@ -36,7 +36,7 @@ export function useExpenses(filters: ExpenseListFilters) {
   return useQuery({
     queryKey: keys.list({ ...filters }),
     queryFn: () => expenseService.list(filters),
-    staleTime: STALE_TIME,
+    staleTime: 0,
     refetchOnWindowFocus: true,
   })
 }

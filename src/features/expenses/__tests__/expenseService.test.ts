@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
 import { buildExpenseListParams, expenseService } from '../services/expenseService'
 import type { ExpenseListFilters } from '../types'
-import { expense } from './expenseFixtures'
+import { expense, expenseStatistics } from './expenseFixtures'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -68,5 +68,37 @@ describe('expense API service', () => {
     await expect(expenseService.markAsPaid(7, '2025-02-02')).resolves.toEqual(expense)
     expect(patch).toHaveBeenCalledOnce()
     expect(get).toHaveBeenCalledWith('/v1/expenses/7')
+  })
+
+  it('preserves nested category statistics without budget or percentage fields', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(expenseStatistics)
+    await expect(expenseService.statistics({ startDate: '2025-02-01', endDate: '2025-02-28' }))
+      .resolves.toEqual(expenseStatistics)
+  })
+
+  it('parses decimal strings at every category depth and rejects invalid nested data', async () => {
+    const raw = {
+      ...expenseStatistics,
+      byCategory: [{
+        categoryId: '10', categoryName: 'Food', total: '650', parentTotal: null,
+        subCategories: [{
+          categoryId: '11', categoryName: 'Groceries', total: '420', parentTotal: '650',
+          subCategories: [{
+            categoryId: '13', categoryName: 'Produce', total: '210', parentTotal: '420', subCategories: [],
+          }],
+        }],
+      }],
+    }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue(raw)
+    const filters = { startDate: '2025-02-01', endDate: '2025-02-28' }
+    const result = await expenseService.statistics(filters)
+    expect(result.byCategory[0].subCategories[0]).toMatchObject({ total: 420, parentTotal: 650 })
+    expect(result.byCategory[0].subCategories[0].subCategories[0]).toMatchObject({ total: 210, parentTotal: 420 })
+
+    get.mockResolvedValue({
+      ...raw,
+      byCategory: [{ ...raw.byCategory[0], subCategories: [{ categoryId: 11, total: 'invalid' }] }],
+    })
+    await expect(expenseService.statistics(filters)).rejects.toThrow('The server returned invalid expense data.')
   })
 })
