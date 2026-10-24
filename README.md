@@ -128,6 +128,19 @@ ui-expense-wiki/
 
 ---
 
+## Dashboard charts
+
+The dashboard spending chart loads live data from
+`GET /v1/expenses/charts/daily?year=YYYY&month=M` and
+`GET /v1/expenses/charts/monthly?year=YYYY`, scoped to the active tenant.
+It starts at the current month/year and supports navigation through the current
+and previous two years. Monthly comparisons use `previousYearTotals`; totals,
+averages, and peaks are calculated from the returned data, including zero totals.
+Loading, errors with retry, and empty periods are shown without demo fallbacks.
+Transaction counts and monthly budgets are not displayed because these endpoints
+do not return them. Other dashboard KPI, upcoming-expense, and category cards
+still use demo data.
+
 ## Expense statistics
 
 The statistics endpoint returns `byCategory` as a recursive hierarchy. Each category

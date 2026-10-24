@@ -16,7 +16,7 @@ import { BudgetConsumptionWidget } from '@/features/budgets'
 export const DashboardPage: React.FC = () => {
   const { activeTenant, canEdit } = useActiveTenant()
 
-  // Dashboard analytics remain demo data; budget consumption uses the live API.
+  // KPI, upcoming expense, and category cards still use demo data.
   const dashboardData = getDashboardDataForTenant(activeTenant.id)
 
   return (
@@ -74,7 +74,6 @@ export const DashboardPage: React.FC = () => {
         <div className="lg:col-span-2 space-y-6">
           <SpendingTrendChart
             tenantId={activeTenant.id}
-            data={dashboardData.monthlyTrends}
             currency={activeTenant.currency}
             locale={activeTenant.locale}
           />

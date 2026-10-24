@@ -17,22 +17,16 @@ import {
   TrendingUp,
   Receipt,
 } from 'lucide-react'
-import type { MonthlyTrendPoint } from '../types'
-import {
-  AVAILABLE_YEARS,
-  AVAILABLE_MONTHS,
-  getMonthlyDataForYear,
-  getDailyDataForMonth,
-} from '../data/mockDashboardData'
+import { useDailyExpenseChart, useMonthlyExpenseChart } from '../hooks/useExpenseCharts'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface SpendingTrendChartProps {
-  tenantId?: string | number
-  data?: MonthlyTrendPoint[]
+  tenantId: string | number
   currency: string
   locale: string
 }
@@ -40,25 +34,53 @@ interface SpendingTrendChartProps {
 type ChartViewTab = 'daily' | 'monthly'
 
 export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
-  tenantId = 101,
+  tenantId,
   currency,
   locale,
 }) => {
   const [activeTab, setActiveTab] = useState<ChartViewTab>('daily')
-  const [selectedYear, setSelectedYear] = useState<number>(2026)
-  const [selectedMonthIdx, setSelectedMonthIdx] = useState<number>(0) // index in AVAILABLE_MONTHS (0 = Oct 2026)
+  const [today] = useState(() => new Date())
+  const availableYears = Array.from({ length: 3 }, (_, idx) => today.getFullYear() - idx)
+  const availableMonths = Array.from({ length: today.getMonth() + 25 }, (_, idx) => {
+    const date = new Date(today.getFullYear(), today.getMonth() - idx, 1)
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      label: date.toLocaleDateString(locale, { month: 'long', year: 'numeric' }),
+    }
+  })
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear())
+  const [selectedMonthIdx, setSelectedMonthIdx] = useState(0)
+  const activeMonthOption = availableMonths[selectedMonthIdx]
+  const monthlyQuery = useMonthlyExpenseChart(tenantId, selectedYear, activeTab === 'monthly')
+  const dailyQuery = useDailyExpenseChart(
+    tenantId, activeMonthOption.year, activeMonthOption.month, activeTab === 'daily',
+  )
+  const activeQuery = activeTab === 'daily' ? dailyQuery : monthlyQuery
 
-  const activeMonthOption = AVAILABLE_MONTHS[selectedMonthIdx] ?? AVAILABLE_MONTHS[0]
-
-  // Monthly Data for the selected year
   const monthlyData = useMemo(() => {
-    return getMonthlyDataForYear(tenantId, selectedYear)
-  }, [tenantId, selectedYear])
+    if (!monthlyQuery.data) return []
+    const response = monthlyQuery.data
+    return [...response.totals].sort((a, b) => a.month - b.month).map((point) => {
+      const date = new Date(response.year, point.month - 1, 1)
+      return {
+        month: date.toLocaleDateString(locale, { month: 'long' }),
+        shortMonth: date.toLocaleDateString(locale, { month: 'short' }),
+        amount: point.total,
+        previousYearAmount: response.previousYearTotals.find((prev) => prev.month === point.month)?.total ?? 0,
+      }
+    })
+  }, [monthlyQuery.data, locale])
 
-  // Daily Data for the selected month
   const dailyData = useMemo(() => {
-    return getDailyDataForMonth(tenantId, activeMonthOption.year, activeMonthOption.month)
-  }, [tenantId, activeMonthOption])
+    if (!dailyQuery.data) return []
+    const response = dailyQuery.data
+    return [...response.totals].sort((a, b) => a.day - b.day).map((point) => ({
+      ...point,
+      label: new Date(response.year, response.month - 1, point.day)
+        .toLocaleDateString(locale, { month: 'short', day: 'numeric' }),
+    }))
+  }, [dailyQuery.data, locale])
 
   // Summary statistics for Daily Tab
   const dailyStats = useMemo(() => {
@@ -85,7 +107,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
   }, [monthlyData])
 
   // Navigation handlers for Daily Month
-  const canGoPrevMonth = selectedMonthIdx < AVAILABLE_MONTHS.length - 1
+  const canGoPrevMonth = selectedMonthIdx < availableMonths.length - 1
   const canGoNextMonth = selectedMonthIdx > 0
 
   const handlePrevMonth = () => {
@@ -97,16 +119,16 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
   }
 
   // Navigation handlers for Monthly Year
-  const currentYearIdx = AVAILABLE_YEARS.indexOf(selectedYear)
-  const canGoPrevYear = currentYearIdx < AVAILABLE_YEARS.length - 1
+  const currentYearIdx = availableYears.indexOf(selectedYear)
+  const canGoPrevYear = currentYearIdx < availableYears.length - 1
   const canGoNextYear = currentYearIdx > 0
 
   const handlePrevYear = () => {
-    if (canGoPrevYear) setSelectedYear(AVAILABLE_YEARS[currentYearIdx + 1])
+    if (canGoPrevYear) setSelectedYear(availableYears[currentYearIdx + 1])
   }
 
   const handleNextYear = () => {
-    if (canGoNextYear) setSelectedYear(AVAILABLE_YEARS[currentYearIdx - 1])
+    if (canGoNextYear) setSelectedYear(availableYears[currentYearIdx - 1])
   }
 
   return (
@@ -143,7 +165,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
               )}
             >
               <Receipt className="w-3.5 h-3.5" />
-              <span>Daily (Current Month)</span>
+              <span>Daily</span>
             </button>
             <button
               type="button"
@@ -186,11 +208,12 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
 
               {/* Month Dropdown Select */}
               <select
+                aria-label="Chart month"
                 value={selectedMonthIdx}
                 onChange={(e) => setSelectedMonthIdx(Number(e.target.value))}
                 className="h-7 px-2.5 text-xs font-medium rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
               >
-                {AVAILABLE_MONTHS.map((opt, idx) => (
+                {availableMonths.map((opt, idx) => (
                   <option key={`${opt.year}-${opt.month}`} value={idx}>
                     {opt.label}
                   </option>
@@ -233,11 +256,12 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
 
               {/* Year Dropdown Select */}
               <select
+                aria-label="Chart year"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
                 className="h-7 px-2.5 text-xs font-mono font-medium rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
               >
-                {AVAILABLE_YEARS.map((y) => (
+                {availableYears.map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
@@ -260,7 +284,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
           )}
 
           {/* Quick Metrics Summary Strip */}
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground font-mono">
+          {activeQuery.isSuccess && (activeTab === 'daily' ? dailyData.length : monthlyData.length) > 0 && <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground font-mono">
             {activeTab === 'daily' ? (
               <>
                 <div>
@@ -308,11 +332,21 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                 </div>
               </>
             )}
-          </div>
+          </div>}
         </div>
       </CardHeader>
 
       <CardContent className="pt-1">
+        {activeQuery.isPending ? (
+          <p role="status" className="py-12 text-sm text-muted-foreground">Loading spending chart...</p>
+        ) : activeQuery.isError ? (
+          <div role="alert" className="space-y-2 py-12 text-sm">
+            <p className="text-destructive">{getApiErrorMessage(activeQuery.error, 'Could not load spending chart.')}</p>
+            <Button variant="outline" size="sm" onClick={() => void activeQuery.refetch()}>Retry chart</Button>
+          </div>
+        ) : (activeTab === 'daily' ? dailyData.length : monthlyData.length) === 0 ? (
+          <p className="py-12 text-sm text-muted-foreground">No spending data for this period.</p>
+        ) : (
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             {activeTab === 'daily' ? (
@@ -350,10 +384,8 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                     if (!active || !payload?.length) return null
                     const item = payload[0].payload as {
                       day: number
-                      date: string
                       label: string
                       total: number
-                      transactions: number
                     }
 
                     return (
@@ -362,9 +394,6 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                           <span className="font-semibold text-foreground">
                             {item.label}, {activeMonthOption.year}
                           </span>
-                          <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                            {item.transactions} {item.transactions === 1 ? 'tx' : 'txs'}
-                          </Badge>
                         </div>
                         <div className="flex items-center justify-between gap-2 pt-0.5">
                           <span className="text-muted-foreground">Daily Spend:</span>
@@ -419,7 +448,6 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                       shortMonth: string
                       amount: number
                       previousYearAmount: number
-                      budget: number
                     }
 
                     const diff = point.amount - point.previousYearAmount
@@ -427,7 +455,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                     const percent =
                       point.previousYearAmount > 0
                         ? ((diff / point.previousYearAmount) * 100).toFixed(1)
-                        : '0.0'
+                        : null
 
                     return (
                       <div className="rounded-xl border border-border/80 bg-card text-card-foreground p-3 shadow-xl text-xs space-y-2 min-w-[200px]">
@@ -444,7 +472,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                             )}
                           >
                             <TrendingUp className="w-3 h-3" />
-                            <span>{isUp ? '+' : ''}{percent}% YoY</span>
+                            <span>{percent === null ? 'YoY N/A' : `${isUp ? '+' : ''}${percent}% YoY`}</span>
                           </span>
                         </div>
 
@@ -473,14 +501,6 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between gap-2 text-xs pt-1 border-t border-border/40">
-                            <span className="text-muted-foreground text-[11px]">
-                              Monthly Budget:
-                            </span>
-                            <span className="font-mono text-muted-foreground text-[11px]">
-                              {formatCurrency(point.budget, { currency, locale })}
-                            </span>
-                          </div>
                         </div>
                       </div>
                     )
@@ -507,6 +527,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
             )}
           </ResponsiveContainer>
         </div>
+        )}
       </CardContent>
     </Card>
   )

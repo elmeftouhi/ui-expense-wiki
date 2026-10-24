@@ -39,6 +39,8 @@ export const queryKeys = {
       detail: (id: string | number) => ['tenant', tenantId, 'expenses', 'detail', id] as const,
       statistics: (params?: Record<string, unknown>) => ['tenant', tenantId, 'expenses', 'statistics', params] as const,
       overdue: () => ['tenant', tenantId, 'expenses', 'overdue'] as const,
+      dailyChart: (year: number, month: number) => ['tenant', tenantId, 'expenses', 'charts', 'daily', year, month] as const,
+      monthlyChart: (year: number) => ['tenant', tenantId, 'expenses', 'charts', 'monthly', year] as const,
     },
 
     subscriptions: {
