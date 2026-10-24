@@ -1,0 +1,54 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { apiClient } from '@/api/client'
+import { budgetService, normalizeBudget } from '../services/budgetService'
+import { budget, payload, period } from './fixtures'
+
+afterEach(() => vi.restoreAllMocks())
+
+describe('budget API service', () => {
+  it('lists budgets and converts serialized decimal strings', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue([{
+      ...budget, allocatedAmount: '1000.50',
+      currentPeriod: { ...period, spentAmount: '850.25' },
+    }])
+    const result = await budgetService.getAll()
+    expect(get).toHaveBeenCalledWith('/v1/budgets')
+    expect(result[0].allocatedAmount).toBe(1000.5)
+    expect(result[0].currentPeriod?.spentAmount).toBe(850.25)
+  })
+
+  it('loads budget details and period history', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValueOnce(budget).mockResolvedValueOnce([period])
+    expect(await budgetService.getById(1)).toEqual(budget)
+    expect(await budgetService.getPeriods(1)).toEqual([period])
+    expect(get.mock.calls.map(([path]) => path)).toEqual(['/v1/budgets/1', '/v1/budgets/1/periods'])
+  })
+
+  it('posts and puts the complete budget payload', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(budget)
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue(budget)
+    await budgetService.create(payload)
+    await budgetService.update(1, payload)
+    expect(post).toHaveBeenCalledWith('/v1/budgets', payload)
+    expect(put).toHaveBeenCalledWith('/v1/budgets/1', payload)
+  })
+
+  it('patches only the allocation and warning rule for the specified period', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue(period)
+    const update = { allocatedAmount: 1200, warningType: 'AMOUNT' as const, warningThreshold: 900 }
+    await budgetService.updatePeriod(1, 10, update)
+    expect(patch).toHaveBeenCalledWith('/v1/budgets/1/periods/10', update)
+  })
+
+  it.each([null, undefined, {}, { ...budget, allocatedAmount: '' }, { ...budget, allocatedAmount: 'bad' }])(
+    'reports malformed responses rather than showing a zero balance: %o', (raw) => {
+      expect(() => normalizeBudget(raw)).toThrow('invalid budget data')
+    },
+  )
+
+  it('does not disguise a failed or invalid list response as an empty list', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('Offline'))
+    await expect(budgetService.getAll()).rejects.toThrow('invalid budget data')
+    await expect(budgetService.getAll()).rejects.toThrow('Offline')
+  })
+})

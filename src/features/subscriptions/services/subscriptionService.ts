@@ -1,0 +1,145 @@
+import { z } from 'zod'
+import { apiClient } from '@/api/client'
+import { filterPaymentMethodPage, loadPaymentMethodMatches } from '@/features/payment-methods/filterPaymentMethodPage'
+import { calculateRecurringCosts } from '../utils/recurringCosts'
+import {
+  generatePaymentResponseSchema,
+  subscriptionPaymentPageResponseSchema,
+  subscriptionPaymentResponseSchema,
+  subscriptionResponseSchema,
+  subscriptionPageResponseSchema,
+} from '../schemas/subscriptionResponseSchema'
+import type {
+  Subscription,
+  SubscriptionRecurringCost,
+  SubscriptionCostFilters,
+  SubscriptionFilters,
+  SubscriptionPayment,
+  SubscriptionPaymentPage,
+  GeneratePaymentResult,
+  SubscriptionPage,
+  SubscriptionPageParams,
+  SubscriptionResumeRequest,
+  SubscriptionWriteRequest,
+} from '../types'
+
+const BASE = '/v1/subscriptions'
+
+function parseResponse<T>(schema: z.ZodType<T>, raw: unknown): T {
+  const result = schema.safeParse(raw)
+  if (!result.success) {
+    throw new Error('The server returned invalid subscription data. Refresh the page or contact support.')
+  }
+  return result.data
+}
+
+export function buildDateOnlyQueryParams(filters: SubscriptionFilters): Record<string, string | number> {
+  const params: Record<string, string | number> = {
+    page: filters.page,
+    size: filters.size,
+    sort: `${filters.sort},${filters.direction}`,
+  }
+  if (filters.search?.trim()) params.search = filters.search.trim()
+  if (filters.status) params.status = filters.status
+  if (filters.categoryIds?.length) params.categoryIds = filters.categoryIds.join(',')
+  else if (filters.categoryId) params.categoryId = filters.categoryId
+  if (filters.frequency) params.frequency = filters.frequency
+  if (filters.nextBillingFrom) params.nextBillingFrom = filters.nextBillingFrom
+  if (filters.nextBillingTo) params.nextBillingTo = filters.nextBillingTo
+  return params
+}
+
+async function parseLifecycleResult(id: number, raw: unknown): Promise<Subscription> {
+  return raw === undefined || raw === null
+    ? subscriptionService.getById(id)
+    : parseResponse(subscriptionResponseSchema, raw)
+}
+
+export const subscriptionService = {
+  async recurringCosts(filters: SubscriptionCostFilters = {}): Promise<SubscriptionRecurringCost[]> {
+    if (filters.paymentMethodId !== undefined) {
+      const matches = await loadPaymentMethodMatches(filters.paymentMethodId,
+        (page, size) => subscriptionService.list({
+          ...filters, paymentMethodId: undefined, page, size, sort: 'name', direction: 'asc',
+        }))
+      return calculateRecurringCosts(matches)
+    }
+    const subscriptions: Subscription[] = []
+    let page = 0
+    let totalPages = 1
+    while (page < totalPages) {
+      const result = await subscriptionService.list({
+        ...filters, page, size: 100, sort: 'name', direction: 'asc',
+      })
+      subscriptions.push(...result.content)
+      totalPages = result.totalPages
+      page += 1
+    }
+    return calculateRecurringCosts(subscriptions)
+  },
+
+  async list(filters: SubscriptionFilters): Promise<SubscriptionPage> {
+    if (filters.paymentMethodId !== undefined) {
+      return filterPaymentMethodPage(filters.paymentMethodId, filters.page, filters.size,
+        (page, size) => subscriptionService.list({ ...filters, paymentMethodId: undefined, page, size }))
+    }
+    return parseResponse(
+      subscriptionPageResponseSchema,
+      await apiClient.get<unknown>(BASE, { params: buildDateOnlyQueryParams(filters) }),
+    )
+  },
+
+  async getById(id: number): Promise<Subscription> {
+    return parseResponse(subscriptionResponseSchema, await apiClient.get<unknown>(`${BASE}/${id}`))
+  },
+
+  async create(payload: SubscriptionWriteRequest): Promise<Subscription> {
+    return parseResponse(subscriptionResponseSchema, await apiClient.post<unknown>(BASE, payload))
+  },
+
+  async update(id: number, payload: SubscriptionWriteRequest): Promise<Subscription> {
+    return parseResponse(subscriptionResponseSchema, await apiClient.put<unknown>(`${BASE}/${id}`, payload))
+  },
+
+  async pause(id: number): Promise<Subscription> {
+    return parseLifecycleResult(id, await apiClient.post<unknown>(`${BASE}/${id}/pause`))
+  },
+
+  async resume(id: number, payload: SubscriptionResumeRequest): Promise<Subscription> {
+    return parseLifecycleResult(id, await apiClient.post<unknown>(`${BASE}/${id}/resume`, payload))
+  },
+
+  async stop(id: number): Promise<Subscription> {
+    return parseLifecycleResult(id, await apiClient.post<unknown>(`${BASE}/${id}/stop`))
+  },
+
+  async payments(id: number, params: SubscriptionPageParams): Promise<SubscriptionPaymentPage> {
+    return parseResponse(
+      subscriptionPaymentPageResponseSchema,
+      await apiClient.get<unknown>(`${BASE}/${id}/payments`, {
+        params: {
+          page: params.page,
+          size: params.size,
+          sort: `${params.sort},${params.direction}`,
+        },
+      }),
+    )
+  },
+
+  async getPaymentById(paymentId: number): Promise<SubscriptionPayment> {
+    return parseResponse(
+      subscriptionPaymentResponseSchema,
+      await apiClient.get<unknown>(`/v1/subscription-payments/${paymentId}`),
+    )
+  },
+
+  async generateNextPayment(subscriptionId: number): Promise<GeneratePaymentResult> {
+    if (!Number.isSafeInteger(subscriptionId) || subscriptionId <= 0) {
+      throw new Error('A valid subscription ID is required.')
+    }
+    return parseResponse(
+      generatePaymentResponseSchema,
+      await apiClient.post<unknown>(`${BASE}/${subscriptionId}/payments/generate-next`),
+    )
+  },
+}

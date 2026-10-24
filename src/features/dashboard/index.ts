@@ -1,0 +1,7 @@
+export * from './types'
+export * from './components/MetricsOverview'
+export * from './components/SpendingTrendChart'
+export * from './components/UpcomingExpensesCard'
+export * from './components/CategoryBreakdownCard'
+export * from './data/mockDashboardData'
+export * from './pages/DashboardPage'
