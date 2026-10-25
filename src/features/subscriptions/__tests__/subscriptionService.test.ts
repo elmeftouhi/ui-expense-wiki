@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
-import { buildDateOnlyQueryParams, subscriptionService } from '../services/subscriptionService'
+import { backfillSubscriptionPayment, buildDateOnlyQueryParams, subscriptionService } from '../services/subscriptionService'
 import type { SubscriptionFilters } from '../types'
 import { payment, subscription } from './fixtures'
 import { DEFAULT_SUBSCRIPTION_FORM_VALUES, subscriptionFormSchema, toSubscriptionPayload } from '../schemas/subscriptionSchema'
@@ -206,5 +206,42 @@ describe('independent subscription API service', () => {
   it('rejects malformed page data instead of reporting an empty list', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue(null)
     await expect(subscriptionService.list(filters)).rejects.toThrow('invalid subscription data')
+  })
+})
+
+describe('historical payment backfill API', () => {
+  const generated = {
+    generated: true, alreadyExists: false, message: 'Historical payment created',
+    paymentId: 160, expenseId: 95, scheduledBillingDate: '2026-08-05',
+  }
+
+  it('posts the scheduled and paid dates to the backfill endpoint and normalizes the result', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ ...generated, paymentId: '160', expenseId: '95' })
+    expect(await backfillSubscriptionPayment(12, { scheduledBillingDate: '2026-08-05', paidDate: '2026-08-06' })).toEqual(generated)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/v1/subscriptions/12/payments/backfill', {
+      scheduledBillingDate: '2026-08-05', paidDate: '2026-08-06',
+    })
+  })
+
+  it('omits an empty paid date from the request body', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(generated)
+    await subscriptionService.backfillSubscriptionPayment(12, { scheduledBillingDate: '2026-08-05', paidDate: '' })
+    expect(post).toHaveBeenCalledWith('/v1/subscriptions/12/payments/backfill', { scheduledBillingDate: '2026-08-05' })
+  })
+
+  it('accepts already-existing results with null IDs and a missing message', async () => {
+    vi.spyOn(apiClient, 'post').mockResolvedValue({
+      generated: false, alreadyExists: true, paymentId: null, expenseId: null, scheduledBillingDate: '2026-08-05',
+    })
+    expect(await subscriptionService.backfillSubscriptionPayment(12, { scheduledBillingDate: '2026-08-05' })).toEqual({
+      generated: false, alreadyExists: true, message: '', paymentId: null, expenseId: null, scheduledBillingDate: '2026-08-05',
+    })
+  })
+
+  it('rejects invalid IDs and contradictory responses', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ ...generated, alreadyExists: true })
+    await expect(subscriptionService.backfillSubscriptionPayment(0, { scheduledBillingDate: '2026-08-05' })).rejects.toThrow('valid subscription ID')
+    expect(post).not.toHaveBeenCalled()
+    await expect(subscriptionService.backfillSubscriptionPayment(12, { scheduledBillingDate: '2026-08-05' })).rejects.toThrow('invalid subscription data')
   })
 })

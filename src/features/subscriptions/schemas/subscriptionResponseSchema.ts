@@ -58,6 +58,15 @@ export const generatePaymentResponseSchema = z.object({
   scheduledBillingDate: z.iso.date(),
 }).refine((result) => result.generated !== result.alreadyExists)
 
+export const backfillPaymentResponseSchema = z.object({
+  generated: z.boolean(),
+  alreadyExists: z.boolean(),
+  message: z.string().nullish().transform((message) => message ?? ''),
+  paymentId: numericValue.pipe(z.number().int().positive()).nullish().transform((id) => id ?? null),
+  expenseId: numericValue.pipe(z.number().int().positive()).nullish().transform((id) => id ?? null),
+  scheduledBillingDate: z.iso.date(),
+}).refine((result) => !(result.generated && result.alreadyExists))
+
 const pageFields = {
   content: z.array(subscriptionResponseSchema),
   size: numericValue.pipe(z.number().int().nonnegative()),

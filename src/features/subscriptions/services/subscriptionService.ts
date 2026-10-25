@@ -3,6 +3,7 @@ import { apiClient } from '@/api/client'
 import { filterPage } from '@/features/payment-methods/filterPaymentMethodPage'
 import { calculateRecurringCosts } from '../utils/recurringCosts'
 import {
+  backfillPaymentResponseSchema,
   generatePaymentResponseSchema,
   subscriptionPaymentPageResponseSchema,
   subscriptionPaymentResponseSchema,
@@ -10,6 +11,8 @@ import {
   subscriptionPageResponseSchema,
 } from '../schemas/subscriptionResponseSchema'
 import type {
+  BackfillSubscriptionPaymentRequest,
+  BackfillSubscriptionPaymentResult,
   Subscription,
   SubscriptionRecurringCost,
   SubscriptionCostFilters,
@@ -156,4 +159,26 @@ export const subscriptionService = {
       await apiClient.post<unknown>(`${BASE}/${subscriptionId}/payments/generate-next`),
     )
   },
+
+  async backfillSubscriptionPayment(
+    subscriptionId: number,
+    payload: BackfillSubscriptionPaymentRequest,
+  ): Promise<BackfillSubscriptionPaymentResult> {
+    if (!Number.isSafeInteger(subscriptionId) || subscriptionId <= 0) {
+      throw new Error('A valid subscription ID is required.')
+    }
+    const body: BackfillSubscriptionPaymentRequest = { scheduledBillingDate: payload.scheduledBillingDate }
+    if (payload.paidDate) body.paidDate = payload.paidDate
+    return parseResponse(
+      backfillPaymentResponseSchema,
+      await apiClient.post<unknown>(`${BASE}/${subscriptionId}/payments/backfill`, body),
+    )
+  },
+}
+
+export function backfillSubscriptionPayment(
+  subscriptionId: number,
+  payload: BackfillSubscriptionPaymentRequest,
+): Promise<BackfillSubscriptionPaymentResult> {
+  return subscriptionService.backfillSubscriptionPayment(subscriptionId, payload)
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarClock, Pencil, RefreshCw, StopCircle } from 'lucide-react'
+import { ArrowLeft, CalendarClock, History, Pencil, RefreshCw, StopCircle } from 'lucide-react'
 import { ApiClientError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,6 +22,7 @@ import { SubscriptionStatusBadge } from '../components/SubscriptionStatusBadge'
 import { SubscriptionDialog } from '../components/SubscriptionDialog'
 import { SubscriptionPaymentsHistory } from '../components/SubscriptionPaymentsHistory'
 import { GenerateNextPaymentButton } from '../components/GenerateNextPaymentButton'
+import { BackfillPaymentModal } from '../components/BackfillPaymentModal'
 
 const FREQUENCY_LABELS: Record<(typeof SUBSCRIPTION_FREQUENCIES)[number], string> = {
   DAILY: 'Daily', WEEKLY: 'Weekly', BIWEEKLY: 'Every two weeks', MONTHLY: 'Monthly',
@@ -85,6 +86,7 @@ function SubscriptionDetailsContent() {
   const [editing, setEditing] = useState(false)
   const [resuming, setResuming] = useState(false)
   const [stopping, setStopping] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const pause = usePauseSubscription()
   const resume = useResumeSubscription()
@@ -159,6 +161,7 @@ function SubscriptionDetailsContent() {
             {subscription.description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{subscription.description}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
+            {canEdit && <Button variant="outline" size="sm" onClick={() => setBackfilling(true)}><History className="mr-1.5 h-4 w-4" /> Add historical payment</Button>}
             {canEdit && !terminal && subscription.status === 'ACTIVE' && (
               <Button variant="outline" size="sm" onClick={() => { void runAction('paused', () => pause.mutateAsync(subscription.id)).catch(() => undefined) }} disabled={pause.isPending}>Pause</Button>
             )}
@@ -202,6 +205,7 @@ function SubscriptionDetailsContent() {
       {editing && <SubscriptionFormModal subscription={subscription} onClose={() => setEditing(false)} onSubmit={handleUpdate} />}
       {resuming && <ResumeSubscriptionModal onClose={() => setResuming(false)} onSubmit={(nextBillingDate) => runAction('resumed', () => resume.mutateAsync({ id: subscription.id, nextBillingDate }))} />}
       {stopping && <StopConfirmation subscription={subscription} onClose={() => setStopping(false)} onConfirm={() => runAction('stopped', () => stop.mutateAsync(subscription.id))} />}
+      {backfilling && <BackfillPaymentModal subscriptionId={subscription.id} onClose={() => setBackfilling(false)} />}
     </div>
   )
 }

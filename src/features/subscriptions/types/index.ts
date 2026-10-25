@@ -122,6 +122,22 @@ export interface GeneratePaymentResult {
   scheduledBillingDate: string
 }
 
+export interface BackfillSubscriptionPaymentRequest {
+  /** YYYY-MM-DD, today or earlier. */
+  scheduledBillingDate: string
+  /** YYYY-MM-DD, optional. */
+  paidDate?: string
+}
+
+export interface BackfillSubscriptionPaymentResult {
+  generated: boolean
+  alreadyExists: boolean
+  message: string
+  paymentId: number | null
+  expenseId: number | null
+  scheduledBillingDate: string
+}
+
 export interface SubscriptionPageParams {
   page: number
   size: number

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/query-keys'
 import { useActiveTenant } from '@/features/tenants'
 import { subscriptionService } from '../services/subscriptionService'
-import type { SubscriptionCostFilters, SubscriptionFilters, SubscriptionPageParams, SubscriptionWriteRequest } from '../types'
+import type { BackfillSubscriptionPaymentRequest, SubscriptionCostFilters, SubscriptionFilters, SubscriptionPageParams, SubscriptionWriteRequest } from '../types'
 
 const STALE_TIME = 30_000
 const validId = (id: number | undefined): id is number =>
@@ -73,20 +73,37 @@ export function useSubscriptionPayment(id: number | undefined) {
   })
 }
 
-export function useGenerateNextPayment() {
+function useInvalidateBillingQueries() {
   const queryClient = useQueryClient()
   const keys = queryKeys.tenantScope(useActiveTenant().activeTenant.id)
+  return () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: keys.subscriptions.all }),
+    queryClient.invalidateQueries({ queryKey: keys.subscriptionPayments.all }),
+    queryClient.invalidateQueries({ queryKey: keys.expenses.all }),
+    queryClient.invalidateQueries({ queryKey: keys.budgets.all }),
+    queryClient.invalidateQueries({ queryKey: keys.dashboard.stats() }),
+  ])
+}
+
+export function useGenerateNextPayment() {
+  const invalidateBilling = useInvalidateBillingQueries()
   return useMutation({
     mutationFn: (id: number) => subscriptionService.generateNextPayment(id),
     retry: false,
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: keys.subscriptions.all }),
-        queryClient.invalidateQueries({ queryKey: keys.subscriptionPayments.all }),
-        queryClient.invalidateQueries({ queryKey: keys.expenses.all }),
-        queryClient.invalidateQueries({ queryKey: keys.budgets.all }),
-        queryClient.invalidateQueries({ queryKey: keys.dashboard.stats() }),
-      ])
+      await invalidateBilling()
+    },
+  })
+}
+
+export function useBackfillSubscriptionPayment() {
+  const invalidateBilling = useInvalidateBillingQueries()
+  return useMutation({
+    mutationFn: ({ subscriptionId, payload }: { subscriptionId: number; payload: BackfillSubscriptionPaymentRequest }) =>
+      subscriptionService.backfillSubscriptionPayment(subscriptionId, payload),
+    retry: false,
+    onSuccess: async () => {
+      await invalidateBilling()
     },
   })
 }
