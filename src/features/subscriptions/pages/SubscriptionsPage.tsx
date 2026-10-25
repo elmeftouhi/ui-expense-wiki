@@ -68,6 +68,9 @@ function SubscriptionsPageContent() {
   const [statuses, setStatuses] = useState<SubscriptionStatus[]>([])
   const [paymentMethodIds, setPaymentMethodIds] = useState<number[]>([])
   const [categoryIds, setCategoryIds] = useState<number[]>([])
+  const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<number[]>([])
+  const [statusExpanded, setStatusExpanded] = useState(true)
+  const [paymentMethodsExpanded, setPaymentMethodsExpanded] = useState(true)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
   const [sort, setSort] = useState<SubscriptionSortField>('nextBillingDate')
@@ -131,6 +134,20 @@ function SubscriptionsPageContent() {
   }
 
   const removeCategory = (id: number) => selectCategory(id, false)
+
+  const categoryRows = useMemo(() => {
+    let collapsedDepth: number | undefined
+    const rows = []
+    for (const [index, category] of categories.options.entries()) {
+      if (collapsedDepth !== undefined && category.depth <= collapsedDepth) collapsedDepth = undefined
+      const hidden = collapsedDepth !== undefined
+      const hasChildren = (categories.options[index + 1]?.depth ?? -1) > category.depth
+      const expanded = !collapsedCategoryIds.includes(category.id)
+      if (!hidden && hasChildren && !expanded) collapsedDepth = category.depth
+      rows.push({ category, hidden, hasChildren, expanded })
+    }
+    return rows
+  }, [categories.options, collapsedCategoryIds])
 
   const hasFilters = !!search || statuses.length > 0 || categoryIds.length > 0 || paymentMethodIds.length > 0
   const clearFilters = () => resetPage(() => {
@@ -213,8 +230,7 @@ function SubscriptionsPageContent() {
       <aside aria-label="Subscription filters" className="min-w-0">
       <Card>
         <CardContent className="space-y-5 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Filters</h2>
+          <div className="flex justify-end">
             <button type="button" onClick={clearFilters} disabled={!hasFilters} className="rounded text-xs text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:text-muted-foreground disabled:no-underline">Clear all</button>
           </div>
           <label className="relative block">
@@ -222,31 +238,52 @@ function SubscriptionsPageContent() {
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <input type="search" value={search} onChange={(event) => resetPage(() => setSearch(event.target.value))} placeholder="Search subscriptions..." className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-xs" />
           </label>
-          <fieldset className="space-y-2 border-t border-border/60 pt-4">
-            <legend className="px-1 text-xs font-semibold">Categories</legend>
+          <fieldset aria-label="Categories" className="space-y-2">
             {categories.isLoading ? <p role="status" className="text-xs text-muted-foreground">Loading categories...</p>
               : categories.error ? <p role="alert" className="text-xs text-destructive">Could not load categories for filtering. {getApiErrorMessage(categories.error)} <button type="button" onClick={() => void categories.refetch()} className="underline">Retry categories</button></p>
               : categories.options.length === 0 ? <p className="text-xs text-muted-foreground">No categories available.</p>
               : <div className="space-y-1 p-1">
-                {categories.options.map((category) => (
-                  <label key={category.id} className="flex cursor-pointer items-start gap-2 py-1 text-xs" style={{ paddingLeft: `${category.depth * 12}px` }}>
-                    <input type="checkbox" checked={categoryIds.includes(category.id)} onChange={(event) => selectCategory(category.id, event.target.checked)} className={checkboxClass} />
-                    <span className="min-w-0 break-words">{category.name}</span>
-                  </label>
+                {categoryRows.map(({ category, hidden, hasChildren, expanded }) => (
+                  <div key={category.id} hidden={hidden}>
+                    <div className="flex items-start gap-1 py-1 text-xs" style={{ paddingLeft: `${category.depth * 12}px` }}>
+                      {hasChildren ? (
+                        <button type="button" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${category.name}`} aria-expanded={expanded}
+                          onClick={() => setCollapsedCategoryIds((current) => expanded ? [...current, category.id] : current.filter((id) => id !== category.id))}
+                          className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                          {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        </button>
+                      ) : <span className="w-4 shrink-0" />}
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2">
+                        <input type="checkbox" checked={categoryIds.includes(category.id)} onChange={(event) => selectCategory(category.id, event.target.checked)} className={checkboxClass} />
+                        <span className="min-w-0 break-words">{category.name}</span>
+                      </label>
+                    </div>
+                  </div>
                 ))}
               </div>}
           </fieldset>
           <fieldset className="space-y-2 border-t border-border/60 pt-4">
-            <legend className="px-1 text-xs font-semibold">Status</legend>
+            <legend className="sr-only">Status</legend>
+            <button type="button" aria-label={`${statusExpanded ? 'Collapse' : 'Expand'} Status`} aria-expanded={statusExpanded} aria-controls="subscription-status-options"
+              onClick={() => setStatusExpanded((current) => !current)} className="flex w-full items-center gap-2 rounded text-left text-xs font-semibold focus-visible:outline-2 focus-visible:outline-ring">
+              {statusExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />} Status
+            </button>
+            <div id="subscription-status-options" hidden={!statusExpanded} className="space-y-2 pl-6">
             {STATUS_OPTIONS.map(({ value, label }) => (
               <label key={value} className="flex cursor-pointer items-center gap-2 py-1 text-xs">
                 <input type="checkbox" checked={statuses.includes(value)} onChange={(event) => resetPage(() => setStatuses((current) => event.target.checked ? [...current, value] : current.filter((status) => status !== value)))} className={checkboxClass} />
                 {label}
               </label>
             ))}
+            </div>
           </fieldset>
           <fieldset className="space-y-2 border-t border-border/60 pt-4">
-            <legend className="px-1 text-xs font-semibold">Payment methods</legend>
+            <legend className="sr-only">Payment methods</legend>
+            <button type="button" aria-label={`${paymentMethodsExpanded ? 'Collapse' : 'Expand'} Payment methods`} aria-expanded={paymentMethodsExpanded} aria-controls="subscription-payment-method-options"
+              onClick={() => setPaymentMethodsExpanded((current) => !current)} className="flex w-full items-center gap-2 rounded text-left text-xs font-semibold focus-visible:outline-2 focus-visible:outline-ring">
+              {paymentMethodsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />} Payment methods
+            </button>
+            <div id="subscription-payment-method-options" hidden={!paymentMethodsExpanded} className="pl-6">
             {paymentMethods.isPending ? <p role="status" className="text-xs text-muted-foreground">Loading payment methods...</p>
               : paymentMethods.error ? <p role="alert" className="text-xs text-destructive">{getApiErrorMessage(paymentMethods.error)} <button type="button" onClick={() => void paymentMethods.refetch()} className="underline">Retry payment methods</button></p>
               : !paymentMethods.data?.length ? <p className="text-xs text-muted-foreground">No payment methods available.</p>
@@ -258,6 +295,7 @@ function SubscriptionsPageContent() {
                   </label>
                 ))}
               </div>}
+            </div>
           </fieldset>
           {categoryIds.length > 0 && (
             <ul aria-label="Selected category filters" className="flex flex-wrap gap-2">

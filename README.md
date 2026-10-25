@@ -84,6 +84,8 @@ support multiple selections: options within a group match any selection, and
 groups combine together. Selecting or clearing a parent category also selects or
 clears all its descendants, including when removing a selected category badge.
 Unrelated categories keep their selection. No selection means all options.
+Parent categories, Status, and Payment methods have expand/collapse buttons.
+Collapsing hides their options without clearing selections; all start expanded.
 **Clear all** resets the filters and search. Recurring totals follow the same
 filters as the list. Multiple statuses use the same full-result filtering approach
 as payment methods, before pagination, since the API accepts only one status.
