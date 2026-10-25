@@ -60,7 +60,7 @@ export function ExpensesPage() {
       </nav>
 
       <Card>
-        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
+        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1 text-xs font-medium text-muted-foreground">
             Year
             <select aria-label="Year" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground" value={filters.year ?? ''} onChange={(event) => {
@@ -98,6 +98,19 @@ export function ExpensesPage() {
               <option value="">All types</option>
               <option value="NORMAL">Normal</option>
               <option value="SUBSCRIPTION">Subscription bill</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-muted-foreground">
+            Payment status
+            <select aria-label="Payment status" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground" value={filters.status ?? ''} onChange={(event) => {
+              const status = event.target.value
+              if (status === '' || status === 'PAID' || status === 'PENDING') {
+                updateFilter('status', status || undefined)
+              }
+            }}>
+              <option value="">All statuses</option>
+              <option value="PAID">Paid</option>
+              <option value="PENDING">Pending</option>
             </select>
           </label>
           <div className="space-y-1 text-xs font-medium text-muted-foreground">

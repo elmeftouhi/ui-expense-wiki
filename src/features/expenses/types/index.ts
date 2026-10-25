@@ -69,6 +69,7 @@ export interface ExpenseStatisticsResponse {
 }
 
 export interface ExpenseListFilters {
+  status?: Extract<ExpenseStatus, 'PAID' | 'PENDING'>
   paymentMethodId?: number
   year?: number
   month?: number

@@ -4,8 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
+import { ToastProvider } from '@/components/ui/toaster'
 import { ExpensesPage } from '../pages/ExpensesPage'
 import type { ExpensePageResponse } from '../types'
+import { expense } from './expenseFixtures'
 
 vi.mock('@/features/tenants', () => ({
   useActiveTenant: () => ({
@@ -48,12 +50,63 @@ afterEach(() => {
 function renderPage() {
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter><ExpensesPage /></MemoryRouter>
+      <ToastProvider><MemoryRouter><ExpensesPage /></MemoryRouter></ToastProvider>
     </QueryClientProvider>,
   )
 }
 
 describe('expense filter requests', () => {
+  it('filters Paid and Pending, resets pagination, preserves other filters, and clears status', async () => {
+    const user = userEvent.setup()
+    vi.mocked(apiClient.get).mockImplementation(async (_url, options) => {
+      const content = [
+        { ...expense, description: 'Pending expense' },
+        { ...expense, id: 8, description: 'Paid expense', status: 'PAID' },
+      ].filter((item) => !options?.params?.status || item.status === options.params.status)
+      return {
+        ...result, totalPages: 1,
+        content, totalElements: content.length,
+      }
+    })
+    renderPage()
+    await screen.findByText('2 expenses')
+    expect(screen.getByRole('combobox', { name: 'Payment status' })).toHaveValue('')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'NORMAL')
+    await screen.findByText('2 expenses')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PAID')
+    await screen.findByText('1 expenses')
+    expect(screen.getByRole('link', { name: 'Paid expense' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Pending expense' })).not.toBeInTheDocument()
+    expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ type: 'NORMAL', status: 'PAID', page: 0, size: 25 }),
+    })
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PENDING')
+    await screen.findByRole('link', { name: 'Pending expense' })
+    expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ type: 'NORMAL', status: 'PENDING', page: 0, size: 25 }),
+    })
+    expect(screen.queryByRole('link', { name: 'Paid expense' })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), '')
+    await screen.findByText('2 expenses')
+    expect(screen.getByRole('link', { name: 'Paid expense' })).toBeInTheDocument()
+    expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, type: 'NORMAL', page: 0, size: 25, sort: 'dueDate,desc' },
+    })
+  })
+
+  it('returns to the first page when changing payment status', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('100 expenses')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('Page 2 of 4')
+    vi.mocked(apiClient.get).mockResolvedValue({ ...result, totalPages: 1, totalElements: 1, content: [expense] })
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PENDING')
+    await screen.findByText('1 expenses')
+    expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
+  })
+
   it('requests current dates and 25 rows, and sends changed filters, sorting, and pagination to the backend', async () => {
     const user = userEvent.setup()
     renderPage()

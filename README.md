@@ -78,6 +78,13 @@ use the same selection. This is correct across pages but can require multiple
 requests for large workspaces; server-side method filtering would remove that
 overhead.
 
+The expense list also offers a **Payment status** filter: **All statuses**,
+**Paid**, or **Pending**. Pending matches only `PENDING`, not `OVERDUE` or
+`CANCELLED`. Selecting a status sends `status=PAID` or `status=PENDING` to
+`GET /v1/expenses`; All statuses omits the parameter. The server filters status
+before pagination. When combined with a payment-method filter, the status is
+preserved in every page request used for client-side payment-method filtering.
+
 The project employs a clean **feature-based** modular architecture designed for enterprise scaling:
 
 ```

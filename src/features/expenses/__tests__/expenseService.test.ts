@@ -18,6 +18,57 @@ const filters: ExpenseListFilters = {
 }
 
 describe('expense API service', () => {
+  it('sends status with server pagination and omits it when cleared', async () => {
+    const response = { content: [expense], page: 1, size: 20, totalPages: 3, totalElements: 42 }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue(response)
+    for (const status of ['PAID', 'PENDING'] as const) {
+      await expect(expenseService.list({ ...filters, status })).resolves.toEqual(response)
+      expect(get).toHaveBeenLastCalledWith('/v1/expenses', {
+        params: { year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION', status, page: 1, size: 20, sort: 'dueDate,asc' },
+      })
+    }
+    await expenseService.list(filters)
+    expect(get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: { year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION', page: 1, size: 20, sort: 'dueDate,asc' },
+    })
+    expect(get).toHaveBeenCalledTimes(3)
+  })
+
+  it('preserves status on every page when combining with a payment method filter', async () => {
+    const paid = { ...expense, id: 8, status: 'PAID' }
+    const otherPaid = { ...paid, id: 9, paymentMethodId: 2 }
+    const get = vi.spyOn(apiClient, 'get').mockImplementation(async (_url, options) => ({
+      content: options?.params?.page === 0
+        ? [paid]
+        : [otherPaid, { ...paid, id: 11 }],
+      page: options?.params?.page, size: 100, totalPages: 2, totalElements: 3,
+    }))
+
+    const page = await expenseService.list({ ...filters, status: 'PAID', paymentMethodId: 1, page: 1, size: 1 })
+    expect(page).toMatchObject({ content: [{ id: 11 }], page: 1, size: 1, totalElements: 2, totalPages: 2 })
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(get).toHaveBeenNthCalledWith(1, '/v1/expenses', {
+      params: { year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION', status: 'PAID', page: 0, size: 100, sort: 'dueDate,asc' },
+    })
+    expect(get).toHaveBeenNthCalledWith(2, '/v1/expenses', {
+      params: expect.objectContaining({ status: 'PAID', page: 1, size: 100 }),
+    })
+
+    const combined = await expenseService.list({ ...filters, status: 'PAID', paymentMethodId: 1, page: 0 })
+    expect(combined.content.map((item) => item.id)).toEqual([8, 11])
+    expect(combined.totalElements).toBe(2)
+    const empty = await expenseService.list({ ...filters, status: 'PAID', paymentMethodId: 99, page: 0 })
+    expect(empty).toMatchObject({ content: [], totalElements: 0, totalPages: 0 })
+  })
+
+  it('surfaces failures from later pages when combining status and payment method filters', async () => {
+    vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({ content: [expense], page: 0, size: 100, totalPages: 2, totalElements: 2 })
+      .mockRejectedValueOnce(new Error('Could not load next page'))
+    await expect(expenseService.list({ ...filters, status: 'PENDING', paymentMethodId: 1 }))
+      .rejects.toThrow('Could not load next page')
+  })
+
   it('serializes supported filters and pageable sort fields', () => {
     expect(buildExpenseListParams(filters)).toEqual({
       year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION',

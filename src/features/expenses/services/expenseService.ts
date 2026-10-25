@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiClient } from '@/api/client'
-import { filterPaymentMethodPage } from '@/features/payment-methods/filterPaymentMethodPage'
+import { filterPage } from '@/features/payment-methods/filterPaymentMethodPage'
 import {
   expensePageResponseSchema,
   expenseResponseSchema,
@@ -32,6 +32,7 @@ export function buildExpenseListParams(filters: ExpenseListFilters): Record<stri
     ...(filters.year && filters.month ? { month: filters.month } : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
     ...(filters.type ? { type: filters.type } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
     page: filters.page,
     size: filters.size,
     sort: `${filters.sort},${filters.direction}`,
@@ -41,8 +42,12 @@ export function buildExpenseListParams(filters: ExpenseListFilters): Record<stri
 export const expenseService = {
   async list(filters: ExpenseListFilters): Promise<ExpensePageResponse> {
     if (filters.paymentMethodId !== undefined) {
-      return filterPaymentMethodPage(filters.paymentMethodId, filters.page, filters.size,
-        (page, size) => expenseService.list({ ...filters, paymentMethodId: undefined, page, size }))
+      return filterPage<ExpenseResponse>(
+        (expense) =>
+          expense.paymentMethodId === filters.paymentMethodId,
+        filters.page, filters.size,
+        (page, size) => expenseService.list({ ...filters, paymentMethodId: undefined, page, size }),
+      )
     }
     return parseResponse(
       expensePageResponseSchema,

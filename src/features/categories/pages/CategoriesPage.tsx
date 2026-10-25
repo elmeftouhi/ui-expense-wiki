@@ -11,8 +11,6 @@ import {
   Edit2,
   Trash2,
   Power,
-  ShieldCheck,
-  ShieldOff,
   CornerDownRight,
 } from 'lucide-react'
 import { useActiveTenant } from '@/features/tenants'
@@ -505,42 +503,6 @@ const TenantCategoriesPage: React.FC = () => {
                           <span className="font-semibold text-xs text-foreground">
                             {parent.name}
                           </span>
-                          {/* Active / Inactive status pill */}
-                          <Badge
-                            variant={parent.active ? 'default' : 'secondary'}
-                            className={`text-[10px] px-1.5 py-0 h-4.5 font-normal ${
-                              parent.active
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                : 'bg-muted text-muted-foreground'
-                            }`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full mr-1 ${
-                                parent.active ? 'bg-emerald-500' : 'bg-muted-foreground'
-                              }`}
-                            />
-                            {parent.active ? 'Active' : 'Inactive'}
-                          </Badge>
-
-                          {/* Budget Policy Badge */}
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] px-1.5 py-0 h-4.5 ${
-                              parent.allowOverBudget
-                                ? 'text-amber-600 border-amber-500/30'
-                                : 'text-blue-600 border-blue-500/30'
-                            }`}
-                          >
-                            {parent.allowOverBudget ? (
-                              <span className="flex items-center gap-1">
-                                <ShieldOff className="w-2.5 h-2.5" /> Flexible
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1">
-                                <ShieldCheck className="w-2.5 h-2.5" /> Strict Limit
-                              </span>
-                            )}
-                          </Badge>
 
                           {hasChildren && (
                             <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
@@ -559,20 +521,6 @@ const TenantCategoriesPage: React.FC = () => {
 
                     {/* Right side: Budget & Actions */}
                     <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pl-9 sm:pl-0">
-                      {/* Budget */}
-                      <div className="text-right">
-                        <span className="text-[10px] text-muted-foreground block">
-                          Monthly Budget
-                        </span>
-                        <span className="font-semibold text-xs text-foreground font-mono">
-                          {parent.monthlyBudget
-                            ? formatCurrency(parent.monthlyBudget, {
-                                currency: activeTenant.currency,
-                                locale: activeTenant.locale,
-                              })
-                            : 'Uncapped'}
-                        </span>
-                      </div>
 
                       {/* Action buttons */}
                       {canEdit && (
