@@ -14,6 +14,46 @@ const filters: SubscriptionFilters = {
 }
 
 describe('independent subscription API service', () => {
+  it('combines multiple statuses and methods across all pages before pagination and totals', async () => {
+    const records = [
+      { ...subscription, id: 1, status: 'STOPPED', paymentMethodId: 2, amount: 10 },
+      { ...subscription, id: 2, status: 'ACTIVE', paymentMethodId: 2, amount: 20 },
+      { ...subscription, id: 3, status: 'PAUSED', paymentMethodId: 3, amount: 30 },
+      { ...subscription, id: 4, status: 'ACTIVE', paymentMethodId: 4, amount: 40 },
+      { ...subscription, id: 5, status: 'ACTIVE', paymentMethodId: null, amount: 50 },
+      { ...subscription, id: 6, status: 'ACTIVE', paymentMethodId: 3, amount: 60 },
+    ]
+    const get = vi.spyOn(apiClient, 'get').mockImplementation(async (_path, config) => {
+      const page = Number(config?.params?.page ?? 0)
+      return { content: records.slice(page * 3, (page + 1) * 3), page, size: 3, totalElements: 6, totalPages: 2 }
+    })
+    const selected: SubscriptionFilters = {
+      page: 1, size: 2, sort: 'name', direction: 'asc', search: 'Design',
+      categoryIds: [5, 7], statuses: ['ACTIVE', 'PAUSED'], paymentMethodIds: [2, 3],
+    }
+    expect(await subscriptionService.list(selected)).toMatchObject({
+      content: [expect.objectContaining({ id: 6 })], page: 1, size: 2, totalElements: 3, totalPages: 2,
+    })
+    expect(get.mock.calls.map((call) => call[1]?.params)).toEqual([0, 1].map((page) => ({
+      page, size: 100, sort: 'name,asc', search: 'Design', categoryIds: '5,7',
+    })))
+    expect(await subscriptionService.recurringCosts(selected)).toEqual([{ currency: 'USD', monthly: 110, yearly: 1320 }])
+    expect(get).toHaveBeenCalledTimes(4)
+  })
+
+  it('sends a single selected status to the server and propagates multi-filter page failures', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      content: [subscription], page: 0, size: 100, totalElements: 1, totalPages: 1,
+    })
+    await subscriptionService.list({ ...filters, statuses: ['PAUSED'] })
+    expect(get).toHaveBeenLastCalledWith('/v1/subscriptions', {
+      params: expect.objectContaining({ status: 'PAUSED' }),
+    })
+    get.mockResolvedValueOnce({ content: [subscription], page: 0, size: 100, totalElements: 101, totalPages: 2 })
+      .mockRejectedValueOnce(new Error('Next page unavailable'))
+    await expect(subscriptionService.recurringCosts({ statuses: ['ACTIVE', 'PAUSED'] })).rejects.toThrow('Next page unavailable')
+  })
+
   it('includes the selected paymentMethodId in create and update request bodies', async () => {
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue(subscription)
     const put = vi.spyOn(apiClient, 'put').mockResolvedValue(subscription)

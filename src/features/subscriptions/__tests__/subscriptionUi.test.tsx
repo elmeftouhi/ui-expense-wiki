@@ -17,7 +17,10 @@ vi.mock('@/features/tenants', () => ({ useActiveTenant: vi.fn() }))
 vi.mock('@/components/ui/use-toast', () => ({ useToast: vi.fn() }))
 vi.mock('@/features/budgets/hooks/useCategoryOptions', () => ({ useCategoryOptions: vi.fn() }))
 vi.mock('@/features/payment-methods/usePaymentMethods', () => {
-  const data = [{ id: 2, name: 'Company card', type: 'CREDIT_CARD', active: true, isDefault: true }]
+  const data = [
+    { id: 2, name: 'Company card', type: 'CREDIT_CARD', active: true, isDefault: true },
+    { id: 3, name: 'Old card', type: 'CREDIT_CARD', active: false, isDefault: false },
+  ]
   return { usePaymentMethods: () => ({ data, isPending: false, error: null, refetch: vi.fn() }) }
 })
 
@@ -105,12 +108,45 @@ describe('subscription list and lifecycle actions', () => {
     await screen.findByRole('link', { name: 'Design tools' })
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 })))
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by payment method' }), '2')
+    await user.click(screen.getByRole('checkbox', { name: 'Company card (default)' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethodId: 2, page: 0 })))
     expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethodId: 2 }))
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by payment method' }), '')
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Filter by payment method' })).toHaveValue(''))
+    await user.click(screen.getByRole('checkbox', { name: 'Company card (default)' }))
+    expect(screen.getByRole('checkbox', { name: 'Company card (default)' })).not.toBeChecked()
     expect(subscriptionService.list).toHaveBeenCalledWith(expect.objectContaining({ paymentMethodId: undefined, page: 0 }))
+  })
+
+  it('combines checkbox selections across groups and clears all filters and search', async () => {
+    const user = userEvent.setup()
+    const { Wrapper } = createWrapper()
+    render(<SubscriptionsPage />, { wrapper: Wrapper })
+    await screen.findByRole('link', { name: 'Design tools' })
+    const sidebar = within(screen.getByRole('complementary', { name: 'Subscription filters' }))
+    expect(sidebar.getAllByRole('group').map((group) => group.querySelector('legend')?.textContent))
+      .toEqual(['Categories', 'Status', 'Payment methods'])
+    await user.click(sidebar.getByRole('checkbox', { name: 'Active' }))
+    await user.click(sidebar.getByRole('checkbox', { name: 'Paused' }))
+    await user.click(sidebar.getByRole('checkbox', { name: 'Company card (default)' }))
+    await user.click(sidebar.getByRole('checkbox', { name: 'Old card (inactive)' }))
+    await user.click(sidebar.getByRole('checkbox', { name: 'Software' }))
+    await user.click(sidebar.getByRole('checkbox', { name: 'Travel' }))
+    await user.type(sidebar.getByRole('searchbox'), 'Design')
+    const selected = {
+      search: 'Design', statuses: ['ACTIVE', 'PAUSED'], status: undefined,
+      paymentMethodIds: [2, 3], paymentMethodId: undefined, categoryIds: [5, 7],
+    }
+    await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ ...selected, page: 0 })))
+    expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining(selected))
+    await user.click(screen.getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 })))
+    await user.click(sidebar.getByRole('checkbox', { name: 'Paused' }))
+    await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'ACTIVE', statuses: undefined, page: 0 })))
+    await user.click(sidebar.getByRole('button', { name: 'Clear all' }))
+    expect(sidebar.getAllByRole('checkbox').every((input) => !(input as HTMLInputElement).checked)).toBe(true)
+    expect(sidebar.getByRole('searchbox')).toHaveValue('')
+    const cleared = { search: undefined, statuses: undefined, status: undefined, categoryIds: undefined, paymentMethodIds: undefined, paymentMethodId: undefined }
+    await waitFor(() => expect(subscriptionService.list).toHaveBeenCalledWith(expect.objectContaining({ ...cleared, page: 0 })))
+    expect(subscriptionService.recurringCosts).toHaveBeenCalledWith(expect.objectContaining(cleared))
   })
 
   it('uses the tenant euro currency for list amounts, monthly equivalents, totals and edits despite legacy USD records', async () => {
@@ -153,7 +189,7 @@ describe('subscription list and lifecycle actions', () => {
     await waitFor(() => expect(subscriptionService.create).toHaveBeenCalledWith(expect.objectContaining({ currency: 'EUR', amount: 25 })))
   })
 
-  it('includes a parent and all descendants, and removes category labels independently for the list and totals', async () => {
+  it('selects and clears category subtrees for both the list and totals without affecting other branches', async () => {
     const user = userEvent.setup()
     const options = [
       { id: 5, name: 'Software', depth: 0, active: true },
@@ -170,23 +206,34 @@ describe('subscription list and lifecycle actions', () => {
     render(<SubscriptionsPage />, { wrapper: Wrapper })
     await screen.findByRole('link', { name: 'Design tools' })
     await user.click(screen.getByRole('button', { name: 'Next page' }))
-    await user.click(screen.getByRole('button', { name: 'Filter by category' }))
-    await user.click(screen.getByRole('treeitem', { name: 'Software' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Software' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(
       expect.objectContaining({ categoryIds: [5, 8, 9, 10], page: 0 }),
     ))
     expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [5, 8, 9, 10] }))
     const labels = within(screen.getByRole('list', { name: 'Selected category filters' }))
     expect(labels.getAllByRole('listitem')).toHaveLength(4)
-    await user.click(labels.getByRole('button', { name: 'Remove Design category filter' }))
-    await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [5, 9, 10] })))
-    expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [5, 9, 10] }))
-    expect(labels.getByText('Design tools')).toBeInTheDocument()
-    await user.click(labels.getByRole('button', { name: 'Remove Software category filter' }))
-    await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [9, 10] })))
-    await user.click(screen.getByRole('button', { name: 'Filter by category' }))
-    await user.click(screen.getByRole('treeitem', { name: 'Travel' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Travel' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Design' }))
+    await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [5, 10, 7] })))
+    expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [5, 10, 7] }))
+    expect(screen.getByRole('checkbox', { name: 'Design' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Design tools' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Hosting' })).toBeChecked()
+    await user.click(screen.getByRole('checkbox', { name: 'Design' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Software' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [7] })))
+    expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [7] }))
+    for (const name of ['Software', 'Design', 'Design tools', 'Hosting']) {
+      expect(screen.getByRole('checkbox', { name })).not.toBeChecked()
+    }
+    expect(screen.getByRole('checkbox', { name: 'Travel' })).toBeChecked()
+    await user.click(screen.getByRole('checkbox', { name: 'Software' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Software category filter' }))
+    expect(subscriptionService.list).toHaveBeenCalledWith(expect.objectContaining({ categoryIds: [7] }))
+    for (const name of ['Software', 'Design', 'Design tools', 'Hosting']) {
+      expect(screen.getByRole('checkbox', { name })).not.toBeChecked()
+    }
     expect(within(screen.getByRole('list', { name: 'Selected category filters' })).getAllByRole('listitem')).toHaveLength(1)
     await user.click(screen.getByRole('button', { name: 'Remove Travel category filter' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenCalledWith(expect.objectContaining({ categoryIds: undefined })))
@@ -234,7 +281,7 @@ describe('subscription list and lifecycle actions', () => {
     await screen.findByRole('link', { name: 'Design tools' })
     const selector = screen.getByRole('combobox', { name: 'Rows per page' })
     expect(selector).toHaveValue('10')
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'ACTIVE')
+    await user.click(screen.getByRole('checkbox', { name: 'Active' }))
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     expect(await screen.findByText('11–20 of 121')).toBeInTheDocument()
     for (const size of [25, 50, 100]) {
@@ -268,10 +315,9 @@ describe('subscription list and lifecycle actions', () => {
     expect(screen.queryByLabelText('Next billing to')).not.toBeInTheDocument()
     expect(table.getByRole('link', { name: 'View Design tools' })).toHaveAttribute('href', '/subscriptions/12')
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'ACTIVE')
+    await user.click(screen.getByRole('checkbox', { name: 'Active' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'ACTIVE', page: 0 })))
-    await user.click(screen.getByRole('button', { name: 'Filter by category' }))
-    await user.click(screen.getByRole('treeitem', { name: 'Software' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Software' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [5] })))
     await user.type(screen.getByRole('searchbox', { name: 'Search subscriptions' }), 'Design')
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'Design' })), { timeout: 2000 })
@@ -347,16 +393,15 @@ describe('subscription list and lifecycle actions', () => {
     expect(yearlyCard).toHaveClass('border')
     expect(within(monthlyCard as HTMLElement).getByText('$120.00')).toBeInTheDocument()
     expect(within(yearlyCard as HTMLElement).getByText('$1,440.00')).toBeInTheDocument()
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'PAUSED')
+    await user.click(screen.getByRole('checkbox', { name: 'Paused' }))
     expect(await costs.findByText('$25.00')).toBeInTheDocument()
     expect(costs.getByText('$300.00')).toBeInTheDocument()
     expect(costs.queryByText('$120.00')).not.toBeInTheDocument()
-    expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith({ status: 'PAUSED', search: undefined, categoryIds: undefined })
-    await user.click(screen.getByRole('button', { name: 'Filter by category' }))
-    await user.click(screen.getByRole('treeitem', { name: 'Software' }))
-    await waitFor(() => expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith({ status: 'PAUSED', search: undefined, categoryIds: [5] }))
+    expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'PAUSED', search: undefined, categoryIds: undefined }))
+    await user.click(screen.getByRole('checkbox', { name: 'Software' }))
+    await waitFor(() => expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'PAUSED', search: undefined, categoryIds: [5] })))
     await user.type(screen.getByRole('searchbox', { name: 'Search subscriptions' }), 'Design')
-    await waitFor(() => expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith({ status: 'PAUSED', search: 'Design', categoryIds: [5] }))
+    await waitFor(() => expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'PAUSED', search: 'Design', categoryIds: [5] })))
     const callsBeforePagination = vi.mocked(subscriptionService.recurringCosts).mock.calls.length
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     expect(costs.getByText('$25.00')).toBeInTheDocument()

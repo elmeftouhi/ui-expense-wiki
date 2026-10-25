@@ -67,8 +67,10 @@ export interface SubscriptionRecurringCost {
 
 export interface SubscriptionFilters {
   paymentMethodId?: number
+  paymentMethodIds?: number[]
   search?: string
   status?: SubscriptionStatus
+  statuses?: SubscriptionStatus[]
   categoryId?: number
   categoryIds?: number[]
   frequency?: SubscriptionFrequency

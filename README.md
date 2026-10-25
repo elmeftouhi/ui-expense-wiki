@@ -78,6 +78,16 @@ use the same selection. This is correct across pages but can require multiple
 requests for large workspaces; server-side method filtering would remove that
 overhead.
 
+The subscriptions page uses a vertical filter sidebar on desktop, stacked above
+the list on smaller screens. Category, status, and payment-method checkboxes
+support multiple selections: options within a group match any selection, and
+groups combine together. Selecting or clearing a parent category also selects or
+clears all its descendants, including when removing a selected category badge.
+Unrelated categories keep their selection. No selection means all options.
+**Clear all** resets the filters and search. Recurring totals follow the same
+filters as the list. Multiple statuses use the same full-result filtering approach
+as payment methods, before pagination, since the API accepts only one status.
+
 The expense list also offers a **Payment status** filter: **All statuses**,
 **Paid**, or **Pending**. Pending matches only `PENDING`, not `OVERDUE` or
 `CANCELLED`. Selecting a status sends `status=PAID` or `status=PENDING` to

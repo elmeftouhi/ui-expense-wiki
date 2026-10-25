@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiClient } from '@/api/client'
-import { filterPaymentMethodPage, loadPaymentMethodMatches } from '@/features/payment-methods/filterPaymentMethodPage'
+import { filterPage } from '@/features/payment-methods/filterPaymentMethodPage'
 import { calculateRecurringCosts } from '../utils/recurringCosts'
 import {
   generatePaymentResponseSchema,
@@ -57,12 +57,11 @@ async function parseLifecycleResult(id: number, raw: unknown): Promise<Subscript
 
 export const subscriptionService = {
   async recurringCosts(filters: SubscriptionCostFilters = {}): Promise<SubscriptionRecurringCost[]> {
-    if (filters.paymentMethodId !== undefined) {
-      const matches = await loadPaymentMethodMatches(filters.paymentMethodId,
-        (page, size) => subscriptionService.list({
-          ...filters, paymentMethodId: undefined, page, size, sort: 'name', direction: 'asc',
-        }))
-      return calculateRecurringCosts(matches)
+    if (filters.paymentMethodId !== undefined || filters.paymentMethodIds?.length || (filters.statuses?.length ?? 0) > 1) {
+      const matches = await subscriptionService.list({
+        ...filters, page: 0, size: Number.MAX_SAFE_INTEGER, sort: 'name', direction: 'asc',
+      })
+      return calculateRecurringCosts(matches.content)
     }
     const subscriptions: Subscription[] = []
     let page = 0
@@ -79,13 +78,28 @@ export const subscriptionService = {
   },
 
   async list(filters: SubscriptionFilters): Promise<SubscriptionPage> {
-    if (filters.paymentMethodId !== undefined) {
-      return filterPaymentMethodPage(filters.paymentMethodId, filters.page, filters.size,
-        (page, size) => subscriptionService.list({ ...filters, paymentMethodId: undefined, page, size }))
+    const methodIds = filters.paymentMethodIds?.length ? filters.paymentMethodIds
+      : filters.paymentMethodId !== undefined ? [filters.paymentMethodId] : []
+    const statuses = filters.statuses ?? []
+    if (methodIds.length || statuses.length > 1) {
+      return filterPage(
+        (subscription: Subscription) =>
+          (!methodIds.length || (subscription.paymentMethodId != null && methodIds.includes(subscription.paymentMethodId)))
+          && (statuses.length <= 1 || statuses.includes(subscription.status)),
+        filters.page,
+        filters.size,
+        (page, size) => subscriptionService.list({
+          ...filters, paymentMethodId: undefined, paymentMethodIds: undefined, statuses: undefined,
+          status: statuses.length === 1 ? statuses[0] : statuses.length > 1 ? undefined : filters.status,
+          page, size,
+        }),
+      )
     }
     return parseResponse(
       subscriptionPageResponseSchema,
-      await apiClient.get<unknown>(BASE, { params: buildDateOnlyQueryParams(filters) }),
+      await apiClient.get<unknown>(BASE, {
+        params: buildDateOnlyQueryParams({ ...filters, status: statuses[0] ?? filters.status }),
+      }),
     )
   },
 

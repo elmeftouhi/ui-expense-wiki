@@ -10,8 +10,7 @@ import { formatTenantCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { cn } from '@/lib/utils'
 import { useCategoryOptions } from '@/features/budgets/hooks/useCategoryOptions'
-import { CategoryTreeSelect } from '@/features/categories/components/CategoryTreeSelect'
-import { PaymentMethodSelect } from '@/features/payment-methods/PaymentMethodSelect'
+import { usePaymentMethods } from '@/features/payment-methods/usePaymentMethods'
 import {
   useCreateSubscription,
   useUpdateSubscription,
@@ -23,6 +22,13 @@ import { SubscriptionFormModal } from '../components/SubscriptionFormModal'
 import { annualCost } from '../utils/recurringCosts'
 
 const PAGE_SIZES = [10, 25, 50, 100]
+const STATUS_OPTIONS = [
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'PAUSED', label: 'Paused' },
+  { value: 'STOPPED', label: 'Stopped' },
+  { value: 'ENDED', label: 'Ended' },
+] as const
+const checkboxClass = 'h-4 w-4 shrink-0 rounded border-input accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
 function formatDateOnly(date: string, locale: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
@@ -44,18 +50,6 @@ function billingTiming(subscription: Subscription) {
   }
 }
 
-function StatusFilter({ value, onChange }: { value: SubscriptionStatus | ''; onChange: (value: SubscriptionStatus | '') => void }) {
-  return (
-    <select aria-label="Filter by status" value={value} onChange={(event) => onChange(event.target.value as SubscriptionStatus | '')} className="h-9 rounded-lg border border-input bg-background px-2 text-xs">
-      <option value="">All statuses</option>
-      <option value="ACTIVE">Active</option>
-      <option value="PAUSED">Paused</option>
-      <option value="STOPPED">Stopped</option>
-      <option value="ENDED">Ended</option>
-    </select>
-  )
-}
-
 export function SubscriptionsPage() {
   const { activeTenant } = useActiveTenant()
   return <SubscriptionsPageContent key={activeTenant.id} />
@@ -64,15 +58,15 @@ export function SubscriptionsPage() {
 function SubscriptionsPageContent() {
   const { activeTenant, canEdit } = useActiveTenant()
   const categories = useCategoryOptions()
+  const paymentMethods = usePaymentMethods(true)
   const toast = useToast()
   const navigate = useNavigate()
   const create = useCreateSubscription()
   const update = useUpdateSubscription()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [status, setStatus] = useState<SubscriptionStatus | ''>('')
-  const [categoryId, setCategoryId] = useState<number | undefined>()
-  const [paymentMethodId, setPaymentMethodId] = useState<number | undefined>()
+  const [statuses, setStatuses] = useState<SubscriptionStatus[]>([])
+  const [paymentMethodIds, setPaymentMethodIds] = useState<number[]>([])
   const [categoryIds, setCategoryIds] = useState<number[]>([])
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
@@ -88,20 +82,24 @@ function SubscriptionsPageContent() {
 
   const filters = useMemo<SubscriptionFilters>(() => ({
     search: debouncedSearch || undefined,
-    status: status || undefined,
+    status: statuses.length === 1 ? statuses[0] : undefined,
+    statuses: statuses.length > 1 ? statuses : undefined,
     categoryIds: categoryIds.length ? categoryIds : undefined,
-    paymentMethodId,
+    paymentMethodId: paymentMethodIds.length === 1 ? paymentMethodIds[0] : undefined,
+    paymentMethodIds: paymentMethodIds.length > 1 ? paymentMethodIds : undefined,
     page,
     size: pageSize,
     sort,
     direction,
-  }), [debouncedSearch, status, categoryIds, paymentMethodId, page, pageSize, sort, direction])
+  }), [debouncedSearch, statuses, categoryIds, paymentMethodIds, page, pageSize, sort, direction])
   const query = useSubscriptions(filters)
   const costs = useSubscriptionRecurringCosts({
     search: filters.search,
     categoryIds: filters.categoryIds,
     status: filters.status,
+    statuses: filters.statuses,
     paymentMethodId: filters.paymentMethodId,
+    paymentMethodIds: filters.paymentMethodIds,
   })
   const subscriptions = query.data?.content ?? []
   const totalPages = query.data?.totalPages ?? 0
@@ -116,7 +114,7 @@ function SubscriptionsPageContent() {
     setPage(0)
   }
 
-  const selectCategory = (id: number | undefined) => {
+  const selectCategory = (id: number, checked: boolean) => {
     const index = categories.options.findIndex((option) => option.id === id)
     const selected = categories.options[index]
     const included = selected ? [selected.id] : []
@@ -128,14 +126,19 @@ function SubscriptionsPageContent() {
       }
     }
     resetPage(() => {
-      setCategoryId(id)
-      setCategoryIds(included)
+      setCategoryIds((current) => checked ? [...new Set([...current, ...included])] : current.filter((category) => !included.includes(category)))
     })
   }
 
-  const removeCategory = (id: number) => resetPage(() => {
-    setCategoryIds((current) => current.filter((category) => category !== id))
-    if (categoryId === id) setCategoryId(undefined)
+  const removeCategory = (id: number) => selectCategory(id, false)
+
+  const hasFilters = !!search || statuses.length > 0 || categoryIds.length > 0 || paymentMethodIds.length > 0
+  const clearFilters = () => resetPage(() => {
+    setSearch('')
+    setDebouncedSearch('')
+    setStatuses([])
+    setCategoryIds([])
+    setPaymentMethodIds([])
   })
 
   const changeSort = (field: SubscriptionSortField) => {
@@ -206,26 +209,58 @@ function SubscriptionsPageContent() {
         )}
       </section>
 
+      <div className="grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <aside aria-label="Subscription filters" className="min-w-0">
       <Card>
-        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(180px,240px)_160px_minmax(160px,1fr)]">
-          <label className="relative sm:col-span-2 lg:col-span-1">
+        <CardContent className="space-y-5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Filters</h2>
+            <button type="button" onClick={clearFilters} disabled={!hasFilters} className="rounded text-xs text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:text-muted-foreground disabled:no-underline">Clear all</button>
+          </div>
+          <label className="relative block">
             <span className="sr-only">Search subscriptions</span>
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <input type="search" value={search} onChange={(event) => resetPage(() => setSearch(event.target.value))} placeholder="Search subscriptions..." className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-xs" />
           </label>
-          <CategoryTreeSelect
-            label="Filter by category"
-            options={categories.options}
-            value={categoryId}
-            onChange={selectCategory}
-            clearLabel={categoryIds.length ? 'Clear category filters' : 'All categories'}
-            size="sm"
-            isLoading={categories.isLoading}
-          />
-          <StatusFilter value={status} onChange={(value) => resetPage(() => setStatus(value))} />
-          <PaymentMethodSelect id="subscription-method-filter" filter value={paymentMethodId} onChange={(id) => resetPage(() => setPaymentMethodId(id))} />
+          <fieldset className="space-y-2 border-t border-border/60 pt-4">
+            <legend className="px-1 text-xs font-semibold">Categories</legend>
+            {categories.isLoading ? <p role="status" className="text-xs text-muted-foreground">Loading categories...</p>
+              : categories.error ? <p role="alert" className="text-xs text-destructive">Could not load categories for filtering. {getApiErrorMessage(categories.error)} <button type="button" onClick={() => void categories.refetch()} className="underline">Retry categories</button></p>
+              : categories.options.length === 0 ? <p className="text-xs text-muted-foreground">No categories available.</p>
+              : <div className="space-y-1 p-1">
+                {categories.options.map((category) => (
+                  <label key={category.id} className="flex cursor-pointer items-start gap-2 py-1 text-xs" style={{ paddingLeft: `${category.depth * 12}px` }}>
+                    <input type="checkbox" checked={categoryIds.includes(category.id)} onChange={(event) => selectCategory(category.id, event.target.checked)} className={checkboxClass} />
+                    <span className="min-w-0 break-words">{category.name}</span>
+                  </label>
+                ))}
+              </div>}
+          </fieldset>
+          <fieldset className="space-y-2 border-t border-border/60 pt-4">
+            <legend className="px-1 text-xs font-semibold">Status</legend>
+            {STATUS_OPTIONS.map(({ value, label }) => (
+              <label key={value} className="flex cursor-pointer items-center gap-2 py-1 text-xs">
+                <input type="checkbox" checked={statuses.includes(value)} onChange={(event) => resetPage(() => setStatuses((current) => event.target.checked ? [...current, value] : current.filter((status) => status !== value)))} className={checkboxClass} />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset className="space-y-2 border-t border-border/60 pt-4">
+            <legend className="px-1 text-xs font-semibold">Payment methods</legend>
+            {paymentMethods.isPending ? <p role="status" className="text-xs text-muted-foreground">Loading payment methods...</p>
+              : paymentMethods.error ? <p role="alert" className="text-xs text-destructive">{getApiErrorMessage(paymentMethods.error)} <button type="button" onClick={() => void paymentMethods.refetch()} className="underline">Retry payment methods</button></p>
+              : !paymentMethods.data?.length ? <p className="text-xs text-muted-foreground">No payment methods available.</p>
+              : <div className="max-h-60 space-y-1 overflow-y-auto p-1">
+                {paymentMethods.data.map((method) => (
+                  <label key={method.id} className="flex cursor-pointer items-start gap-2 py-1 text-xs">
+                    <input type="checkbox" checked={paymentMethodIds.includes(method.id)} onChange={(event) => resetPage(() => setPaymentMethodIds((current) => event.target.checked ? [...current, method.id] : current.filter((id) => id !== method.id)))} className={checkboxClass} />
+                    <span className="min-w-0 break-words">{method.name}{!method.active ? ' (inactive)' : method.isDefault ? ' (default)' : ''}</span>
+                  </label>
+                ))}
+              </div>}
+          </fieldset>
           {categoryIds.length > 0 && (
-            <ul aria-label="Selected category filters" className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+            <ul aria-label="Selected category filters" className="flex flex-wrap gap-2">
               {categoryIds.map((id) => {
                 const name = categories.byId.get(id)?.name ?? `Category #${id}`
                 return (
@@ -243,10 +278,8 @@ function SubscriptionsPageContent() {
           )}
         </CardContent>
       </Card>
-
-      {categories.error && <p role="alert" className="rounded-lg border border-destructive/30 p-3 text-xs text-destructive">Could not load categories for filtering. {getApiErrorMessage(categories.error)}</p>}
-
-      <Card className="overflow-hidden">
+      </aside>
+      <Card className="min-w-0 overflow-hidden">
         {query.isLoading ? (
           <div role="status" aria-busy="true" className="space-y-3 p-6">
             {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-10 animate-pulse rounded bg-muted" />)}
@@ -260,7 +293,7 @@ function SubscriptionsPageContent() {
         ) : subscriptions.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
             <CalendarClock className="h-8 w-8 text-muted-foreground" />
-            <div><h2 className="text-sm font-semibold">{filters.search || status || categoryIds.length > 0 || paymentMethodId ? 'No subscriptions match these filters' : 'No subscriptions yet'}</h2>
+            <div><h2 className="text-sm font-semibold">{hasFilters ? 'No subscriptions match these filters' : 'No subscriptions yet'}</h2>
               <p className="mt-1 max-w-md text-xs text-muted-foreground">Create a subscription to schedule recurring payments. Linked expenses appear separately in Expenses.</p></div>
             {canEdit && <Button onClick={() => setFormOpen(true)} size="sm"><Plus className="mr-1.5 h-4 w-4" /> Create subscription</Button>}
           </div>
@@ -332,6 +365,7 @@ function SubscriptionsPageContent() {
           </footer>
         )}
       </Card>
+      </div>
 
       {formOpen && <SubscriptionFormModal onClose={() => setFormOpen(false)} onSubmit={handleCreate} />}
       {editing && <SubscriptionFormModal subscription={editing} onClose={() => setEditing(null)} onSubmit={handleUpdate} />}
