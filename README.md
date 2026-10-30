@@ -157,8 +157,8 @@ and previous two years. Monthly comparisons use `previousYearTotals`; totals,
 averages, and peaks are calculated from the returned data, including zero totals.
 Loading, errors with retry, and empty periods are shown without demo fallbacks.
 Transaction counts and monthly budgets are not displayed because these endpoints
-do not return them. Other dashboard KPI, upcoming-expense, and category cards
-still use demo data.
+do not return them. The category card also uses live statistics (see "Dashboard
+category spending" below); the upcoming-expense list still uses demo data.
 
 ## Expense statistics
 
@@ -461,6 +461,19 @@ expense details also load `/v1/subscription-payments/{paymentId}` and use the
 payment's `subscriptionId` to link to its schedule.
 
 ---
+
+## Dashboard category spending
+
+The dashboard's **Spending by Category** card reuses
+`GET /v1/expenses/statistics?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`
+for the first day of the current local month through today, matching the
+statistics page's default range. It shows positive top-level `byCategory`
+totals (which include subcategories), sorted by amount, with percentages of
+`totalExpenses`. Nested totals are not added again. No additional backend
+endpoint or percentage/color fields are required. The card shares the
+tenant-scoped statistics cache and expense-mutation invalidation; dashboard
+Refresh reloads it alongside the summary. Loading, empty, and retry states
+replace demo category data.
 
 ## Category ordering
 

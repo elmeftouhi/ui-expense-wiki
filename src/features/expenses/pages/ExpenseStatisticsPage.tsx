@@ -8,18 +8,7 @@ import { formatCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useExpenseStatistics } from '../hooks/useExpenses'
 import type { ExpenseCategoryStatistic, ExpenseStatisticsFilters } from '../types'
-
-function dateOnly(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function initialRange(): ExpenseStatisticsFilters {
-  const today = new Date()
-  return {
-    startDate: dateOnly(new Date(today.getFullYear(), today.getMonth(), 1)),
-    endDate: dateOnly(today),
-  }
-}
+import { currentMonthStatisticsRange } from '../utils/statisticsRange'
 
 const categoryColors = [
   'bg-blue-500/10 text-blue-700 dark:text-blue-300',
@@ -74,7 +63,7 @@ function CategoryRow({ category, amount, color, depth = 0 }: {
 
 export function ExpenseStatisticsPage() {
   const { activeTenant } = useActiveTenant()
-  const [range, setRange] = useState(initialRange)
+  const [range, setRange] = useState<ExpenseStatisticsFilters>(currentMonthStatisticsRange)
   const stats = useExpenseStatistics(range)
   const invalidRange = Boolean(range.startDate && range.endDate && range.startDate > range.endDate)
 

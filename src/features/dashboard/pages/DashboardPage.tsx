@@ -13,12 +13,21 @@ import { CategoryBreakdownCard } from '../components/CategoryBreakdownCard'
 import { getDashboardDataForTenant } from '../data/mockDashboardData'
 import { useDashboardSummary } from '../hooks/useDashboardSummary'
 import { BudgetConsumptionWidget } from '@/features/budgets'
+import { useExpenseStatistics } from '@/features/expenses'
+import { currentMonthStatisticsRange } from '@/features/expenses/utils/statisticsRange'
 
 export const DashboardPage: React.FC = () => {
   const { activeTenant, canEdit } = useActiveTenant()
   const summary = useDashboardSummary(activeTenant.id)
+  const statistics = useExpenseStatistics(currentMonthStatisticsRange())
+  const isRefreshing = summary.isRefreshing || statistics.isFetching
+  const refresh = () => {
+    if (isRefreshing) return
+    summary.refresh()
+    void statistics.refetch({ cancelRefetch: false })
+  }
 
-  // Upcoming expense list and category cards still use demo data.
+  // The upcoming expense list still uses demo data.
   const dashboardData = getDashboardDataForTenant(activeTenant.id)
 
   return (
@@ -44,12 +53,12 @@ export const DashboardPage: React.FC = () => {
             variant="outline"
             size="sm"
             className="h-9 gap-1.5 text-xs"
-            onClick={summary.refresh}
-            disabled={summary.isRefreshing}
-            aria-busy={summary.isRefreshing}
+            onClick={refresh}
+            disabled={isRefreshing}
+            aria-busy={isRefreshing}
           >
-            <RefreshCw className={cn('w-3.5 h-3.5', summary.isRefreshing && 'animate-spin')} />
-            <span>{summary.isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+            <RefreshCw className={cn('w-3.5 h-3.5', isRefreshing && 'animate-spin')} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
           </Button>
 
           <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
@@ -126,7 +135,11 @@ export const DashboardPage: React.FC = () => {
           />
 
           <CategoryBreakdownCard
-            categories={dashboardData.categoryBreakdown}
+            statistics={statistics.data}
+            isLoading={statistics.isLoading}
+            error={statistics.error}
+            onRetry={() => void statistics.refetch({ cancelRefetch: false })}
+            isFetching={statistics.isFetching}
             currency={activeTenant.currency}
             locale={activeTenant.locale}
           />
