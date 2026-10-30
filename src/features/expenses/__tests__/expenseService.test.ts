@@ -9,7 +9,7 @@ afterEach(() => vi.restoreAllMocks())
 const filters: ExpenseListFilters = {
   year: 2025,
   month: 2,
-  categoryId: 3,
+  categoryIds: [3, 5],
   type: 'SUBSCRIPTION',
   page: 1,
   size: 20,
@@ -24,12 +24,12 @@ describe('expense API service', () => {
     for (const status of ['PAID', 'PENDING'] as const) {
       await expect(expenseService.list({ ...filters, status })).resolves.toEqual(response)
       expect(get).toHaveBeenLastCalledWith('/v1/expenses', {
-        params: { year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION', status, page: 1, size: 20, sort: 'dueDate,asc' },
+        params: { year: 2025, month: 2, categoryIds: '3,5', type: 'SUBSCRIPTION', status, page: 1, size: 20, sort: 'dueDate,asc' },
       })
     }
     await expenseService.list(filters)
     expect(get).toHaveBeenLastCalledWith('/v1/expenses', {
-      params: { year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION', page: 1, size: 20, sort: 'dueDate,asc' },
+      params: { year: 2025, month: 2, categoryIds: '3,5', type: 'SUBSCRIPTION', page: 1, size: 20, sort: 'dueDate,asc' },
     })
     expect(get).toHaveBeenCalledTimes(3)
   })
@@ -44,14 +44,14 @@ describe('expense API service', () => {
       page: options?.params?.page, size: 100, totalPages: 2, totalElements: 3,
     }))
 
-    const page = await expenseService.list({ ...filters, status: 'PAID', paymentMethodId: 1, page: 1, size: 1 })
+    const page = await expenseService.list({ ...filters, search: 'bill', status: 'PAID', paymentMethodId: 1, page: 1, size: 1 })
     expect(page).toMatchObject({ content: [{ id: 11 }], page: 1, size: 1, totalElements: 2, totalPages: 2 })
     expect(get).toHaveBeenCalledTimes(2)
     expect(get).toHaveBeenNthCalledWith(1, '/v1/expenses', {
-      params: { year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION', status: 'PAID', page: 0, size: 100, sort: 'dueDate,asc' },
+      params: { year: 2025, month: 2, categoryIds: '3,5', search: 'bill', type: 'SUBSCRIPTION', status: 'PAID', page: 0, size: 100, sort: 'dueDate,asc' },
     })
     expect(get).toHaveBeenNthCalledWith(2, '/v1/expenses', {
-      params: expect.objectContaining({ status: 'PAID', page: 1, size: 100 }),
+      params: expect.objectContaining({ search: 'bill', categoryIds: '3,5', status: 'PAID', page: 1, size: 100 }),
     })
 
     const combined = await expenseService.list({ ...filters, status: 'PAID', paymentMethodId: 1, page: 0 })
@@ -71,10 +71,21 @@ describe('expense API service', () => {
 
   it('serializes supported filters and pageable sort fields', () => {
     expect(buildExpenseListParams(filters)).toEqual({
-      year: 2025, month: 2, categoryId: 3, type: 'SUBSCRIPTION',
+      year: 2025, month: 2, categoryIds: '3,5', type: 'SUBSCRIPTION',
       page: 1, size: 20, sort: 'dueDate,asc',
     })
     expect(buildExpenseListParams({ ...filters, year: undefined, month: 2 })).not.toHaveProperty('month')
+  })
+
+  it('sends trimmed search and omits empty search and category selections', () => {
+    expect(buildExpenseListParams({ ...filters, search: '  electricity bill  ' })).toMatchObject({
+      search: 'electricity bill', categoryIds: '3,5',
+    })
+    const params = buildExpenseListParams({ ...filters, search: '   ', categoryIds: [] })
+    expect(params).not.toHaveProperty('search')
+    expect(params).not.toHaveProperty('categoryIds')
+    expect(params).not.toHaveProperty('categoryId')
+    expect(buildExpenseListParams({ ...filters, categoryIds: undefined })).not.toHaveProperty('categoryIds')
   })
 
   it('uses the expense resource for CRUD and lifecycle actions', async () => {

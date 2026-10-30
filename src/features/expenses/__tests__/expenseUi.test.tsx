@@ -88,6 +88,7 @@ describe('expense UI', () => {
   it('defaults to the current month and 25 rows, and clears payment method without Reset', async () => {
     const user = userEvent.setup()
     render(<MemoryRouter><ExpensesPage /></MemoryRouter>)
+    await user.click(screen.getByRole('button', { name: /More filters/ }))
     const now = new Date()
     expect(screen.getByRole('combobox', { name: 'Year' })).toHaveValue(String(now.getFullYear()))
     expect(screen.getByRole('combobox', { name: 'Month' })).toHaveValue(String(now.getMonth() + 1))

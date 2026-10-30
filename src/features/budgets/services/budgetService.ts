@@ -5,10 +5,18 @@ import type {
   Budget,
   BudgetCreateRequest,
   BudgetPeriod,
+  BudgetPeriodResponse,
   BudgetPeriodUpdateRequest,
 } from '../types'
 
 const BASE = '/v1/budgets'
+
+/** Backend-accepted range for `monthsBack` on the history endpoint. */
+export const BUDGET_HISTORY_MONTHS = { min: 1, max: 60, default: 12 } as const
+
+export function isValidMonthsBack(value: number): boolean {
+  return Number.isInteger(value) && value >= BUDGET_HISTORY_MONTHS.min && value <= BUDGET_HISTORY_MONTHS.max
+}
 
 function parseResponse<T>(schema: z.ZodType<T>, raw: unknown): T {
   const result = schema.safeParse(raw)
@@ -66,6 +74,18 @@ export const budgetService = {
   },
 
   /**
+   * Month history (newest first). Spent amounts include PAID expenses only.
+   * `monthsBack` is omitted when undefined so the backend default (12) applies.
+   * Endpoint: GET /v1/budgets/{id}/history?monthsBack={n}
+   */
+  async getHistory(id: number, monthsBack?: number): Promise<BudgetPeriodResponse[]> {
+    return parseResponse(
+      z.array(budgetPeriodResponseSchema),
+      await apiClient.get<unknown>(`${BASE}/${id}/history`, { params: { monthsBack } }),
+    )
+  },
+
+  /**
    * Adjusts a single period instance's allocation and warning rule.
    * Endpoint: PATCH /v1/budgets/{id}/periods/{periodId}
    */
@@ -78,4 +98,8 @@ export const budgetService = {
       await apiClient.patch<unknown>(`${BASE}/${id}/periods/${periodId}`, payload),
     )
   },
+}
+
+export function getBudgetHistory(budgetId: number, monthsBack?: number): Promise<BudgetPeriodResponse[]> {
+  return budgetService.getHistory(budgetId, monthsBack)
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiClient } from '@/api/client'
-import { budgetService, normalizeBudget } from '../services/budgetService'
+import { apiClient, ApiClientError } from '@/api/client'
+import { budgetService, getBudgetHistory, isValidMonthsBack, normalizeBudget } from '../services/budgetService'
 import { budget, payload, period } from './fixtures'
 
 afterEach(() => vi.restoreAllMocks())
@@ -51,4 +51,51 @@ describe('budget API service', () => {
     await expect(budgetService.getAll()).rejects.toThrow('invalid budget data')
     await expect(budgetService.getAll()).rejects.toThrow('Offline')
   })
+})
+
+describe('getBudgetHistory', () => {
+  it('requests history with monthsBack as a query param and normalizes decimals', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue([{ ...period, spentAmount: '12.50' }])
+    const result = await getBudgetHistory(1, 6)
+    expect(get).toHaveBeenCalledWith('/v1/budgets/1/history', { params: { monthsBack: 6 } })
+    expect(result).toEqual([{ ...period, spentAmount: 12.5 }])
+  })
+
+  it('omits monthsBack when not provided so the backend default applies', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue([])
+    expect(await getBudgetHistory(7)).toEqual([])
+    expect(get).toHaveBeenCalledWith('/v1/budgets/7/history', { params: { monthsBack: undefined } })
+  })
+
+  it('builds the final URL without an empty monthsBack param', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await getBudgetHistory(3)
+      await getBudgetHistory(3, 24)
+      const urls = fetchMock.mock.calls.map(([url]) => new URL(String(url)))
+      expect(urls[0].pathname).toMatch(/\/v1\/budgets\/3\/history$/)
+      expect(urls[0].searchParams.has('monthsBack')).toBe(false)
+      expect(urls[1].searchParams.get('monthsBack')).toBe('24')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('propagates 400 errors for an invalid monthsBack', async () => {
+    vi.spyOn(apiClient, 'get').mockRejectedValue(new ApiClientError('Bad request', 400))
+    await expect(getBudgetHistory(1, 99)).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('rejects malformed history payloads', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue([{ ...period, status: 'UNKNOWN' }])
+    await expect(getBudgetHistory(1)).rejects.toThrow('invalid budget data')
+  })
+
+  it.each([[1, true], [60, true], [0, false], [61, false], [2.5, false], [Number.NaN, false]])(
+    'validates monthsBack %s → %s', (value, expected) => {
+      expect(isValidMonthsBack(value)).toBe(expected)
+    },
+  )
 })

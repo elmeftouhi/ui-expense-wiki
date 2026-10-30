@@ -45,6 +45,7 @@ beforeEach(() => {
   vi.spyOn(budgetService, 'getAll').mockResolvedValue([budget])
   vi.spyOn(budgetService, 'getById').mockResolvedValue(budget)
   vi.spyOn(budgetService, 'getPeriods').mockResolvedValue([period])
+  vi.spyOn(budgetService, 'getHistory').mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -113,6 +114,16 @@ describe('budget pages', () => {
     expect(screen.getByRole('heading', { name: 'Budget not found' })).toBeInTheDocument()
     expect(budgetService.getById).not.toHaveBeenCalled()
     expect(budgetService.getPeriods).not.toHaveBeenCalled()
+  })
+
+  it('loads the month history on the details page with the default range', async () => {
+    vi.mocked(budgetService.getHistory).mockResolvedValue([period])
+    const { Wrapper } = createWrapper('/budgets/1')
+    render(<Routes><Route path="/budgets/:budgetId" element={<BudgetDetailsPage />} /></Routes>, { wrapper: Wrapper })
+    const table = await screen.findByRole('table', { name: 'Budget history' })
+    expect(table).toHaveTextContent('Oct 2026')
+    expect(budgetService.getHistory).toHaveBeenCalledWith(1, 12)
+    expect(screen.getByText('Spent (paid)')).toBeInTheDocument()
   })
 
   it('handles a server-side 404', async () => {

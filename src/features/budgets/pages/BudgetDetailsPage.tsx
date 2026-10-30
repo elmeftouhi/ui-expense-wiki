@@ -40,6 +40,7 @@ import { BudgetFormModal } from '../components/BudgetFormModal'
 import { PeriodEditModal } from '../components/PeriodEditModal'
 import { PeriodHistoryTable } from '../components/PeriodHistoryTable'
 import { BudgetHelpPanel } from '../components/BudgetHelpPanel'
+import { BudgetHistorySection } from '../components/BudgetHistorySection'
 
 const BackLink: React.FC = () => (
   <Button asChild variant="ghost" size="sm" className="-ml-2 h-8 gap-1.5 text-xs text-muted-foreground">
@@ -217,7 +218,7 @@ const BudgetDetailsContent: React.FC = () => {
                 <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {[
                     ['Allocated', money(summary.allocated)],
-                    ['Spent', money(summary.spent)],
+                    ['Spent (paid)', money(summary.spent)],
                     ['Warns at', money(summary.warningAt)],
                     ['Last updated', formatDate(current.updatedAt ?? current.createdAt, { locale: activeTenant.locale })],
                   ].map(([label, value]) => (
@@ -274,12 +275,15 @@ const BudgetDetailsContent: React.FC = () => {
               </p>
               <BudgetCategoryChips categoryIds={budget.categoryIds} categoriesById={categories.byId} />
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                These categories may also belong to other budgets — matching expenses are deducted from each.
+                These categories may also belong to other budgets — matching expenses are deducted from each. Matching is
+                exact: subcategories are only counted when tracked themselves, and only paid expenses count as spent.
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <BudgetHistorySection budgetId={budget.id} currency={activeTenant.currency} locale={activeTenant.locale} />
 
       {/* Period history */}
       <Card>
@@ -289,7 +293,7 @@ const BudgetDetailsContent: React.FC = () => {
               <History className="h-4 w-4 text-primary" /> Period history
             </CardTitle>
             <CardDescription className="mt-1 text-xs">
-              Spend is recalculated automatically when expenses are updated or deleted.
+              Spend (paid expenses only) is recalculated automatically when expenses are updated, paid or deleted.
             </CardDescription>
           </div>
           <Button

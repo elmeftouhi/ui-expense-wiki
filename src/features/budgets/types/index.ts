@@ -27,6 +27,9 @@ export interface BudgetPeriod {
   updatedAt?: string
 }
 
+/** Item returned by GET /v1/budgets/{id}/history (same shape as a period instance). */
+export type BudgetPeriodResponse = BudgetPeriod
+
 export interface Budget {
   id: number
   name: string

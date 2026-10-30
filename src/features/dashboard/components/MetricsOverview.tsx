@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   TrendingUp,
   TrendingDown,
+  Minus,
   Calendar,
   Clock,
   AlertCircle,
@@ -11,31 +12,33 @@ import {
   FileCheck,
   ArrowRight,
 } from 'lucide-react'
-import type { DashboardKpiMetrics } from '../types'
+import type { DashboardPeriodTotals, DashboardSummary } from '../types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { formatCurrency, formatDate } from '@/lib/formatters'
+import { formatCurrency } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
 interface MetricsOverviewProps {
-  kpis: DashboardKpiMetrics
+  summary?: DashboardSummary
+  isLoading?: boolean
   currency: string
   locale: string
 }
 
+const EMPTY = '—'
+
 export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
-  kpis,
+  summary,
+  isLoading = false,
   currency,
   locale,
 }) => {
-  const { thisMonth, thisYear, upcomingExpenses, pendingApprovals, budgetUtilization, overdue } =
-    kpis
+  const money = (value: number | undefined) =>
+    value === undefined ? EMPTY : formatCurrency(value, { currency, locale })
 
-  const renderTrendBadge = (
-    percentageChange: number,
-    trend: 'up' | 'down' | 'neutral',
-  ) => {
-    const isUp = trend === 'up'
+  const renderTrendBadge = (percentageChange: number) => {
+    const isUp = percentageChange > 0
+    const isDown = percentageChange < 0
     const formattedPercent = `${isUp ? '+' : ''}${percentageChange.toFixed(1)}%`
 
     return (
@@ -44,38 +47,56 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
           'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold tabular-nums tracking-tight',
           isUp
             ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
-            : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20',
+            : isDown
+            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+            : 'bg-muted text-muted-foreground border border-border',
         )}
       >
         {isUp ? (
           <TrendingUp className="w-3.5 h-3.5" />
-        ) : (
+        ) : isDown ? (
           <TrendingDown className="w-3.5 h-3.5" />
+        ) : (
+          <Minus className="w-3.5 h-3.5" />
         )}
         <span>{formattedPercent}</span>
       </span>
     )
   }
 
-  // Formatting Month comparison details
-  const diffSignMonth = thisMonth.difference >= 0 ? '+' : '-'
-  const formattedDiffMonth = `${diffSignMonth}${formatCurrency(Math.abs(thisMonth.difference), {
-    currency,
-    locale,
-  })}`
-  const formattedPrevMonth = formatCurrency(thisMonth.previousAmount, { currency, locale })
+  const renderComparison = (period: DashboardPeriodTotals | undefined, label: string) => {
+    if (!period) {
+      return <span className="text-muted-foreground">{isLoading ? 'Loading…' : EMPTY}</span>
+    }
+    const difference = period.currentTotal - period.previousTotal
+    const formattedDiff = `${difference >= 0 ? '+' : '-'}${money(Math.abs(difference))}`
+    return (
+      <>
+        {renderTrendBadge(period.percentageChange)}
+        <span className="text-muted-foreground">
+          <strong className="text-foreground font-medium">{formattedDiff}</strong> vs {label} ({money(period.previousTotal)})
+        </span>
+      </>
+    )
+  }
 
-  // Formatting Year comparison details
-  const diffSignYear = thisYear.difference >= 0 ? '+' : '-'
-  const formattedDiffYear = `${diffSignYear}${formatCurrency(Math.abs(thisYear.difference), {
-    currency,
-    locale,
-  })}`
-  const formattedPrevYear = formatCurrency(thisYear.previousAmount, { currency, locale })
+  const month = summary?.monthExpenses
+  const year = summary?.yearExpenses
+  const upcoming = summary?.upcomingThisMonth
+  const overdue = summary?.overdue
+  const pending = summary?.pending
+  const budget = summary?.monthlyBudget
+  const usedPercentage = budget?.usedPercentage ?? 0
+  const overdueCount = overdue?.count ?? 0
+  const nextExpenseLabel = upcoming?.nextExpenseLabel?.trim() || EMPTY
 
   return (
-    <section className="space-y-4" aria-label="Key Financial Performance Metrics">
-      {/* Primary KPI Row: This Month, This Year, Total Upcoming */}
+    <section
+      className={cn('space-y-4 transition-opacity', isLoading && !summary && 'opacity-60')}
+      aria-label="Key Financial Performance Metrics"
+      aria-busy={isLoading}
+    >
+      {/* Primary KPI Row: This Month, This Year, Upcoming This Month */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* 1. Total Expense This Month */}
         <Card className="relative overflow-hidden border-border/80 shadow-xs hover:border-border transition-all">
@@ -90,15 +111,15 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
             </div>
 
             <div className="space-y-2">
-              <div className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums">
-                {formatCurrency(thisMonth.currentAmount, { currency, locale })}
+              <div
+                className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums"
+                data-testid="month-current-total"
+              >
+                {money(month?.currentTotal)}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs">
-                {renderTrendBadge(thisMonth.percentageChange, thisMonth.trend)}
-                <span className="text-muted-foreground">
-                  <strong className="text-foreground font-medium">{formattedDiffMonth}</strong> vs last month ({formattedPrevMonth})
-                </span>
+              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs" data-testid="month-comparison">
+                {renderComparison(month, 'last month')}
               </div>
             </div>
           </CardContent>
@@ -117,26 +138,26 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
             </div>
 
             <div className="space-y-2">
-              <div className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums">
-                {formatCurrency(thisYear.currentAmount, { currency, locale })}
+              <div
+                className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums"
+                data-testid="year-current-total"
+              >
+                {money(year?.currentTotal)}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs">
-                {renderTrendBadge(thisYear.percentageChange, thisYear.trend)}
-                <span className="text-muted-foreground">
-                  <strong className="text-foreground font-medium">{formattedDiffYear}</strong> vs 2025 YTD ({formattedPrevYear})
-                </span>
+              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs" data-testid="year-comparison">
+                {renderComparison(year, 'last year YTD')}
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* 3. Total Upcoming Expenses */}
+        {/* 3. Upcoming Expenses This Month */}
         <Card className="relative overflow-hidden border-border/80 shadow-xs hover:border-border transition-all">
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Total Upcoming Expenses
+                Upcoming This Month
               </span>
               <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
                 <Clock className="w-4 h-4" />
@@ -144,30 +165,29 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
             </div>
 
             <div className="space-y-2">
-              <div className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums">
-                {formatCurrency(upcomingExpenses.totalAmount, { currency, locale })}
+              <div
+                className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums"
+                data-testid="upcoming-total"
+              >
+                {money(upcoming?.totalAmount)}
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-muted-foreground">
                 <Badge variant="secondary" className="text-[11px] font-medium">
-                  {upcomingExpenses.count} scheduled
+                  {upcoming ? `${upcoming.count} scheduled` : EMPTY}
                 </Badge>
-                {upcomingExpenses.nextDueDate && (
-                  <span className="truncate">
-                    Next:{' '}
-                    {upcomingExpenses.nextItemTitle ? `${upcomingExpenses.nextItemTitle} · ` : ''}
-                    {formatDate(upcomingExpenses.nextDueDate, { locale, dateStyle: 'medium' })}
-                  </span>
-                )}
+                <span className="truncate" data-testid="upcoming-next">
+                  Next: {upcoming ? nextExpenseLabel : EMPTY}
+                </span>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Secondary Operational Metrics Row: Budget, Pending Approvals, Overdue */}
+      {/* Secondary Operational Metrics Row: Budget, Pending, Overdue */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* 4. Monthly Budget Utilization */}
+        {/* 6. Monthly Budget */}
         <Card className="border-border/80 shadow-xs group hover:border-border transition-all">
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center justify-between">
@@ -181,20 +201,19 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
                 <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
               </Link>
               <Badge
-                variant={budgetUtilization.percentage > 90 ? 'destructive' : 'outline'}
+                variant={usedPercentage > 90 ? 'destructive' : 'outline'}
                 className="text-[11px] font-mono"
+                data-testid="budget-used"
               >
-                {budgetUtilization.percentage.toFixed(0)}% used
+                {budget ? `${usedPercentage.toFixed(0)}% used` : EMPTY}
               </Badge>
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between text-xs">
-                <span className="font-semibold text-foreground font-mono">
-                  {formatCurrency(budgetUtilization.spent, { currency, locale })}
-                </span>
-                <span className="text-muted-foreground font-mono text-[11px]">
-                  of {formatCurrency(budgetUtilization.monthlyBudget, { currency, locale })}
+                <span className="text-muted-foreground text-[11px]">Total budget</span>
+                <span className="font-semibold text-foreground font-mono" data-testid="budget-total">
+                  {money(budget?.totalBudget)}
                 </span>
               </div>
 
@@ -203,21 +222,21 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
                 <div
                   className={cn(
                     'h-full rounded-full transition-all duration-500',
-                    budgetUtilization.percentage > 90
+                    usedPercentage > 90
                       ? 'bg-destructive'
-                      : budgetUtilization.percentage > 75
+                      : usedPercentage > 75
                       ? 'bg-amber-500'
                       : 'bg-primary',
                   )}
-                  style={{ width: `${Math.min(100, budgetUtilization.percentage)}%` }}
+                  style={{ width: `${Math.max(0, Math.min(100, usedPercentage))}%` }}
                 />
               </div>
 
               <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-0.5">
                 <span>
                   Remaining:{' '}
-                  <strong className="font-semibold text-foreground font-mono">
-                    {formatCurrency(budgetUtilization.remaining, { currency, locale })}
+                  <strong className="font-semibold text-foreground font-mono" data-testid="budget-remaining">
+                    {money(budget?.totalRemaining)}
                   </strong>
                 </span>
                 <Link
@@ -232,31 +251,34 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
           </CardContent>
         </Card>
 
-        {/* 5. Pending Approvals */}
+        {/* 5. Pending */}
         <Card className="border-border/80 shadow-xs">
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                 <FileCheck className="w-4 h-4 text-primary" />
-                <span>Pending Approvals</span>
+                <span>Pending</span>
               </div>
-              <Badge variant="warning" className="text-[11px]">
-                {pendingApprovals.count} reports
+              <Badge variant="warning" className="text-[11px]" data-testid="pending-count">
+                {pending ? `${pending.count} pending` : EMPTY}
               </Badge>
             </div>
 
             <div className="space-y-1">
-              <div className="text-2xl font-bold tracking-tight text-foreground font-mono tabular-nums">
-                {formatCurrency(pendingApprovals.totalAmount, { currency, locale })}
+              <div
+                className="text-2xl font-bold tracking-tight text-foreground font-mono tabular-nums"
+                data-testid="pending-total"
+              >
+                {money(pending?.totalAmount)}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Awaiting management verification & sign-off
+                Awaiting payment or confirmation
               </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* 6. Overdue Invoices / Action Status */}
+        {/* 4. Overdue */}
         <Card className="border-border/80 shadow-xs">
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center justify-between">
@@ -264,27 +286,29 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
                 <AlertCircle
                   className={cn(
                     'w-4 h-4',
-                    overdue.count > 0 ? 'text-destructive' : 'text-emerald-500',
+                    overdueCount > 0 ? 'text-destructive' : 'text-emerald-500',
                   )}
                 />
-                <span>Overdue Invoices</span>
+                <span>Overdue</span>
               </div>
               <Badge
-                variant={overdue.count > 0 ? 'destructive' : 'success'}
+                variant={overdueCount > 0 ? 'destructive' : 'success'}
                 className="text-[11px]"
+                data-testid="overdue-count"
               >
-                {overdue.count > 0 ? `${overdue.count} overdue` : 'All settled'}
+                {!overdue ? EMPTY : overdueCount > 0 ? `${overdueCount} overdue` : 'All settled'}
               </Badge>
             </div>
 
             <div className="space-y-1">
-              <div className="text-2xl font-bold tracking-tight text-foreground font-mono tabular-nums">
-                {overdue.count > 0
-                  ? formatCurrency(overdue.totalAmount, { currency, locale })
-                  : formatCurrency(0, { currency, locale })}
+              <div
+                className="text-2xl font-bold tracking-tight text-foreground font-mono tabular-nums"
+                data-testid="overdue-total"
+              >
+                {money(overdue?.totalAmount)}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {overdue.count > 0
+                {overdueCount > 0
                   ? 'Immediate disbursement required'
                   : 'Zero outstanding overdue payments'}
               </p>

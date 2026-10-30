@@ -69,11 +69,12 @@ export interface ExpenseStatisticsResponse {
 }
 
 export interface ExpenseListFilters {
+  search?: string
   status?: Extract<ExpenseStatus, 'PAID' | 'PENDING'>
   paymentMethodId?: number
   year?: number
   month?: number
-  categoryId?: number
+  categoryIds?: number[]
   type?: ExpenseType
   page: number
   size: number

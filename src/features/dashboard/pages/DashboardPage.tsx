@@ -1,22 +1,24 @@
 import React from 'react'
-import { Plus, Download, PiggyBank } from 'lucide-react'
+import { Plus, Download, PiggyBank, RefreshCw, AlertCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useActiveTenant } from '@/features/tenants'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import {
-  MetricsOverview,
-  SpendingTrendChart,
-  UpcomingExpensesCard,
-  CategoryBreakdownCard,
-  getDashboardDataForTenant,
-} from '@/features/dashboard'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { cn } from '@/lib/utils'
+import { MetricsOverview } from '../components/MetricsOverview'
+import { SpendingTrendChart } from '../components/SpendingTrendChart'
+import { UpcomingExpensesCard } from '../components/UpcomingExpensesCard'
+import { CategoryBreakdownCard } from '../components/CategoryBreakdownCard'
+import { getDashboardDataForTenant } from '../data/mockDashboardData'
+import { useDashboardSummary } from '../hooks/useDashboardSummary'
 import { BudgetConsumptionWidget } from '@/features/budgets'
 
 export const DashboardPage: React.FC = () => {
   const { activeTenant, canEdit } = useActiveTenant()
+  const summary = useDashboardSummary(activeTenant.id)
 
-  // KPI, upcoming expense, and category cards still use demo data.
+  // Upcoming expense list and category cards still use demo data.
   const dashboardData = getDashboardDataForTenant(activeTenant.id)
 
   return (
@@ -37,7 +39,19 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 text-xs"
+            onClick={summary.refresh}
+            disabled={summary.isRefreshing}
+            aria-busy={summary.isRefreshing}
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', summary.isRefreshing && 'animate-spin')} />
+            <span>{summary.isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </Button>
+
           <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
             <Link to="/budgets">
               <PiggyBank className="w-3.5 h-3.5" />
@@ -62,8 +76,27 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* SECTION 1: Financial Numbers & Core KPIs (including Monthly Budget & link) */}
+      {summary.error && !summary.isRefreshing && (
+        <div
+          role="alert"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              {summary.data ? 'Could not refresh the dashboard summary; showing last loaded values. ' : 'Dashboard summary could not be loaded. '}
+              {getApiErrorMessage(summary.error)}
+            </span>
+          </div>
+          <Button variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={summary.refresh}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       <MetricsOverview
-        kpis={dashboardData.kpis}
+        summary={summary.data}
+        isLoading={summary.isLoading}
         currency={activeTenant.currency}
         locale={activeTenant.locale}
       />

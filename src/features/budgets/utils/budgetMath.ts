@@ -136,6 +136,30 @@ export function summarizePortfolio(budgets: Budget[]): BudgetPortfolioSummary {
   }
 }
 
+/** Short month label for history rows, e.g. "Oct 2026"; falls back to a date range for multi-month spans. */
+export function formatHistoryPeriodLabel(
+  period: Pick<BudgetPeriod, 'startDate' | 'endDate'>,
+  locale?: string,
+): string {
+  const start = parseIsoDate(period.startDate)
+  const end = parseIsoDate(period.endDate)
+  if (Number.isNaN(start.getTime())) return '—'
+  const sameMonth =
+    Number.isNaN(end.getTime()) ||
+    (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth())
+  if (!sameMonth) return formatDateRange(period, locale)
+  return new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' }).format(start)
+}
+
+/** Compact warning threshold: "80%" for percentage rules, a currency amount otherwise. */
+export function formatWarningThreshold(
+  warningType: BudgetWarningType,
+  threshold: number,
+  formatMoney: (n: number) => string,
+): string {
+  return warningType === 'PERCENTAGE' ? `${threshold}%` : formatMoney(threshold)
+}
+
 export function describeWarningRule(
   warningType: BudgetWarningType,
   threshold: number,

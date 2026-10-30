@@ -19,7 +19,13 @@ vi.mock('@/features/tenants', () => ({
 
 vi.mock('@/features/budgets/hooks/useCategoryOptions', () => ({
   useCategoryOptions: () => ({
-    options: [{ id: 3, name: 'Utilities', depth: 0, active: true }],
+    options: [
+      { id: 3, name: 'Utilities', depth: 0, active: true },
+      { id: 5, name: 'Electricity', depth: 1, parentName: 'Utilities', active: true },
+      { id: 8, name: 'Home meter', depth: 2, parentName: 'Electricity', active: true },
+      { id: 9, name: 'Water', depth: 1, parentName: 'Utilities', active: true },
+      { id: 12, name: 'Travel', depth: 0, active: true },
+    ],
     isLoading: false,
     error: null,
   }),
@@ -70,6 +76,7 @@ describe('expense filter requests', () => {
     })
     renderPage()
     await screen.findByText('2 expenses')
+    await user.click(screen.getByRole('button', { name: /More filters/ }))
     expect(screen.getByRole('combobox', { name: 'Payment status' })).toHaveValue('')
     await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'NORMAL')
     await screen.findByText('2 expenses')
@@ -102,6 +109,7 @@ describe('expense filter requests', () => {
     await user.click(screen.getByRole('button', { name: 'Next' }))
     await screen.findByText('Page 2 of 4')
     vi.mocked(apiClient.get).mockResolvedValue({ ...result, totalPages: 1, totalElements: 1, content: [expense] })
+    await user.click(screen.getByRole('button', { name: /More filters/ }))
     await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PENDING')
     await screen.findByText('1 expenses')
     expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
@@ -121,6 +129,7 @@ describe('expense filter requests', () => {
       params: expect.objectContaining({ page: 1, size: 25 }),
     }))
     await screen.findByText('Page 2 of 4')
+    await user.click(screen.getByRole('button', { name: /More filters/ }))
     await user.selectOptions(screen.getByRole('combobox', { name: 'Rows per page' }), '50')
     await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
       params: expect.objectContaining({ page: 0, size: 50 }),
@@ -136,7 +145,7 @@ describe('expense filter requests', () => {
     await screen.findByText('100 expenses')
     await user.click(screen.getByRole('button', { name: 'Amount' }))
     await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
-      params: { year: now.getFullYear() - 1, month: 2, type: 'NORMAL', categoryId: 3, page: 0, size: 50, sort: 'amount,asc' },
+      params: { year: now.getFullYear() - 1, month: 2, type: 'NORMAL', categoryIds: '3,5,8,9', page: 0, size: 50, sort: 'amount,asc' },
     }))
     const requests = vi.mocked(apiClient.get).mock.calls.length
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by payment method' }), '2')
@@ -147,6 +156,7 @@ describe('expense filter requests', () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByText('100 expenses')
+    await user.click(screen.getByRole('button', { name: /More filters/ }))
     await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'NORMAL')
     await screen.findByText('100 expenses')
     const requests = vi.mocked(apiClient.get).mock.calls.length
@@ -160,5 +170,97 @@ describe('expense filter requests', () => {
     await act(async () => resolve({ ...result, totalElements: 75 }))
     expect(await screen.findByText('75 expenses')).toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('keeps search and category visible while optional filters can be opened and collapsed without clearing them', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('100 expenses')
+    expect(screen.getByRole('searchbox', { name: 'Search expenses' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Category' })).toBeVisible()
+    expect(screen.queryByRole('combobox', { name: 'Year' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /More filters/ })).toHaveAttribute('aria-expanded', 'false')
+    await user.click(screen.getByRole('button', { name: /More filters/ }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PAID')
+    await screen.findByText('100 expenses')
+    const requests = vi.mocked(apiClient.get).mock.calls.length
+    await user.click(screen.getByRole('button', { name: /Fewer filters/ }))
+    expect(screen.queryByRole('combobox', { name: 'Payment status' })).not.toBeInTheDocument()
+    expect(apiClient.get).toHaveBeenCalledTimes(requests)
+    await user.click(screen.getByRole('button', { name: /More filters/ }))
+    expect(screen.getByRole('combobox', { name: 'Payment status' })).toHaveValue('PAID')
+  })
+
+  it('adds entire category branches without duplicates and removes only the chosen chip', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('100 expenses')
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Utilities' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ categoryIds: '3,5,8,9', page: 0 }),
+    }))
+    for (const name of ['Utilities', 'Electricity', 'Home meter', 'Water']) {
+      expect(screen.getByRole('button', { name: `Remove ${name}` })).toBeVisible()
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search categories' }), 'Electricity')
+    await user.click(screen.getByRole('treeitem', { name: 'Electricity' }))
+    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(4)
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('Page 2 of 4')
+    await user.click(screen.getByRole('button', { name: 'Remove Electricity' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ categoryIds: '3,8,9', page: 0 }),
+    }))
+    expect(screen.getByRole('button', { name: 'Remove Home meter' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Remove Utilities' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ categoryIds: '8,9', page: 0 }),
+    }))
+
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Travel' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ categoryIds: '8,9,12', page: 0 }),
+    }))
+    await user.click(screen.getByRole('button', { name: 'Clear categories' }))
+    await waitFor(() => expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).not.toHaveProperty('categoryIds'))
+    expect(screen.queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument()
+  })
+
+  it('omits categoryIds when the last category chip is removed', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('100 expenses')
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Travel' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ categoryIds: '12' }),
+    }))
+    await user.click(screen.getByRole('button', { name: 'Remove Travel' }))
+    await waitFor(() => expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).not.toHaveProperty('categoryIds'))
+    expect(screen.queryByRole('button', { name: 'Clear categories' })).not.toBeInTheDocument()
+  })
+
+  it('debounces search, resets pagination, preserves categories, and clears the search parameter', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('100 expenses')
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Travel' }))
+    await screen.findByText('100 expenses')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('Page 2 of 4')
+    const requests = vi.mocked(apiClient.get).mock.calls.length
+    await user.type(screen.getByRole('searchbox', { name: 'Search expenses' }), '  train  ')
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ search: 'train', categoryIds: '12', page: 0 }),
+    }))
+    expect(apiClient.get).toHaveBeenCalledTimes(requests + 1)
+    await user.clear(screen.getByRole('searchbox', { name: 'Search expenses' }))
+    await waitFor(() => expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).not.toHaveProperty('search'))
+    expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).toHaveProperty('categoryIds', '12')
   })
 })

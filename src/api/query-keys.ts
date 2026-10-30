@@ -30,6 +30,7 @@ export const queryKeys = {
 
     dashboard: {
       stats: (params?: Record<string, unknown>) => ['tenant', tenantId, 'dashboard', 'stats', params] as const,
+      summary: () => ['tenant', tenantId, 'dashboard', 'summary'] as const,
       activity: () => ['tenant', tenantId, 'dashboard', 'activity'] as const,
     },
 
@@ -73,6 +74,8 @@ export const queryKeys = {
       list: () => ['tenant', tenantId, 'budgets', 'list'] as const,
       detail: (id: string | number) => ['tenant', tenantId, 'budgets', 'detail', id] as const,
       periods: (id: string | number) => ['tenant', tenantId, 'budgets', 'detail', id, 'periods'] as const,
+      history: (id: string | number, monthsBack?: number) =>
+        ['tenant', tenantId, 'budgets', 'detail', id, 'history', monthsBack ?? 'default'] as const,
     },
 
     receipts: {

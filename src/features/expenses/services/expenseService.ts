@@ -30,7 +30,8 @@ export function buildExpenseListParams(filters: ExpenseListFilters): Record<stri
   return {
     ...(filters.year ? { year: filters.year } : {}),
     ...(filters.year && filters.month ? { month: filters.month } : {}),
-    ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+    ...(filters.search?.trim() ? { search: filters.search.trim() } : {}),
+    ...(filters.categoryIds?.length ? { categoryIds: filters.categoryIds.join(',') } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.status ? { status: filters.status } : {}),
     page: filters.page,

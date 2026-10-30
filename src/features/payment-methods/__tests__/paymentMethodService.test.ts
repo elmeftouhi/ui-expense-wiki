@@ -51,9 +51,9 @@ describe('payment method list filtering', () => {
     const get = vi.spyOn(apiClient, 'get')
       .mockResolvedValueOnce({ content: [{ ...expense, id: 1, paymentMethodId: 2 }], page: 0, size: 100, totalPages: 2, totalElements: 3 })
       .mockResolvedValueOnce({ content: [{ ...expense, id: 2, paymentMethodId: 1 }, { ...expense, id: 3, paymentMethodId: 2 }], page: 1, size: 100, totalPages: 2, totalElements: 3 })
-    const result = await expenseService.list({ paymentMethodId: 2, categoryId: 3, year: 2026, month: 10, page: 1, size: 1, sort: 'dueDate', direction: 'desc' })
+    const result = await expenseService.list({ paymentMethodId: 2, categoryIds: [3], year: 2026, month: 10, page: 1, size: 1, sort: 'dueDate', direction: 'desc' })
     expect(result).toMatchObject({ page: 1, size: 1, totalElements: 2, totalPages: 2, content: [{ id: 3 }] })
-    expect(get).toHaveBeenNthCalledWith(2, '/v1/expenses', { params: { year: 2026, month: 10, categoryId: 3, page: 1, size: 100, sort: 'dueDate,desc' } })
+    expect(get).toHaveBeenNthCalledWith(2, '/v1/expenses', { params: { year: 2026, month: 10, categoryIds: '3', page: 1, size: 100, sort: 'dueDate,desc' } })
   })
 
   it('filters subscription pages and recurring totals by ID, including historical inactive methods', async () => {

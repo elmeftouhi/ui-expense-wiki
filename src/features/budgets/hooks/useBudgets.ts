@@ -1,8 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiClientError } from '@/api/client'
 import { queryKeys } from '@/api/query-keys'
 import { useActiveTenant } from '@/features/tenants'
-import { budgetService } from '../services/budgetService'
-import type { Budget, BudgetCreateRequest, BudgetPeriod, BudgetPeriodUpdateRequest } from '../types'
+import { budgetService, isValidMonthsBack } from '../services/budgetService'
+import type {
+  Budget,
+  BudgetCreateRequest,
+  BudgetPeriod,
+  BudgetPeriodResponse,
+  BudgetPeriodUpdateRequest,
+} from '../types'
 
 const BUDGET_STALE_TIME = 1000 * 30 // spend is recalculated server-side on expense changes
 
@@ -49,6 +56,30 @@ export function useBudgetPeriods(id: number | undefined) {
     enabled: validId(id),
     staleTime: BUDGET_STALE_TIME,
     refetchOnWindowFocus: true,
+  })
+}
+
+export function useBudgetHistory(id: number | undefined, monthsBack?: number) {
+  const keys = useBudgetKeys()
+  const queryClient = useQueryClient()
+  const defaultRetry = queryClient.getDefaultOptions().queries?.retry ?? 3
+  const enabled = validId(id) && (monthsBack === undefined || isValidMonthsBack(monthsBack))
+  return useQuery<BudgetPeriodResponse[], Error>({
+    queryKey: keys.history(id ?? 'none', monthsBack),
+    queryFn: () => {
+      if (!validId(id)) throw new Error('A valid budget ID is required.')
+      return budgetService.getHistory(id, monthsBack)
+    },
+    enabled,
+    staleTime: BUDGET_STALE_TIME,
+    refetchOnWindowFocus: true,
+    // 4xx (e.g. 400 for an out-of-range monthsBack) won't succeed on retry; otherwise use the client default.
+    retry: (failureCount, error) => {
+      if (error instanceof ApiClientError && error.status >= 400 && error.status < 500) return false
+      if (typeof defaultRetry === 'function') return defaultRetry(failureCount, error)
+      if (typeof defaultRetry === 'number') return failureCount < defaultRetry
+      return defaultRetry
+    },
   })
 }
 

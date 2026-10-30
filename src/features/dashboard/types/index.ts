@@ -50,6 +50,31 @@ export interface DashboardKpiMetrics {
   }
 }
 
+export interface DashboardPeriodTotals {
+  currentTotal: number
+  previousTotal: number
+  percentageChange: number
+}
+
+export interface DashboardAmountCount {
+  totalAmount: number
+  count: number
+}
+
+/** Response of GET /v1/dashboard/summary */
+export interface DashboardSummary {
+  monthExpenses: DashboardPeriodTotals
+  yearExpenses: DashboardPeriodTotals
+  upcomingThisMonth: DashboardAmountCount & { nextExpenseLabel: string | null }
+  overdue: DashboardAmountCount
+  pending: DashboardAmountCount
+  monthlyBudget: {
+    totalBudget: number
+    usedPercentage: number
+    totalRemaining: number
+  }
+}
+
 export interface ExpenseTimeSeriesPoint {
   date: string
   total: number

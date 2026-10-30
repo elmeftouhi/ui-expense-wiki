@@ -6,12 +6,12 @@ const RULES: { icon: React.ComponentType<{ className?: string }>; title: string;
   {
     icon: Zap,
     title: 'Automatic deductions',
-    body: 'You never log spend against a budget manually. When an expense is saved, the backend deducts it from every matching budget.',
+    body: 'You never log spend against a budget manually. When an expense is marked paid, the backend deducts it from every matching budget. Unpaid expenses are not counted.',
   },
   {
     icon: Layers,
     title: 'Categories can be shared',
-    body: 'One category can belong to multiple budgets. An expense in that category counts toward each of them.',
+    body: 'One category can belong to multiple budgets. Matching is exact: an expense counts toward each budget that tracks its own category (parent categories do not include subcategories).',
   },
   {
     icon: Timer,
@@ -21,7 +21,7 @@ const RULES: { icon: React.ComponentType<{ className?: string }>; title: string;
   {
     icon: RefreshCw,
     title: 'Edits recalculate spend',
-    body: 'Updating or deleting an expense recalculates spend on the affected budget periods.',
+    body: 'Updating, paying or deleting an expense recalculates spend on the affected budget periods.',
   },
   {
     icon: Sparkles,

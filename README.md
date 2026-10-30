@@ -402,6 +402,17 @@ records; `/expenses/:expenseId` displays a record and its lifecycle actions.
 `/expenses/overdue` loads the backend overdue view, and
 `/expenses/statistics` fetches date-range totals and category breakdowns.
 
+The ledger keeps text search and an **Add categories** tree picker visible.
+Search sends the trimmed `search` query parameter after a short debounce.
+Picking a parent adds the parent and all descendant categories, without
+duplicates; selected categories appear as removable chips beneath the search
+row. Removing a chip excludes only that ID, and **Clear categories** removes
+the category filter. Requests send comma-separated IDs as `categoryIds=5,8`.
+**More filters** reveals year, month, type, payment status, payment method, and
+rows per page; collapsing it preserves those selections. The active-filter
+count includes the current year and month defaults. Filter changes return to
+the first page.
+
 Expense entry starts with the category tree picker (see "Category picker").
 Choosing a category focuses the amount field. Descriptions are
 optional: blank or whitespace-only descriptions are replaced with the selected
@@ -480,7 +491,8 @@ Children remain nested under their parent; categories without a level follow
 ranked siblings, preserving API order for ties.
 
 Every single-category choice (expense form, subscription form, and the
-category filters on Expenses and Subscriptions) uses `CategoryTreeSelect`
+category filter on Subscriptions), plus the additive category picker on
+Expenses, uses `CategoryTreeSelect`
 (`src/features/categories/components/CategoryTreeSelect.tsx`) instead of a
 native `<select>` or the old card grid. It is a compact field that opens a
 tree popover:
