@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiClient } from '@/api/client'
-import { filterPage } from '@/features/payment-methods/filterPaymentMethodPage'
+import { loadPaymentMethodMatches } from '@/features/payment-methods/filterPaymentMethodPage'
 import {
   expensePageResponseSchema,
   expenseResponseSchema,
@@ -43,12 +43,20 @@ export function buildExpenseListParams(filters: ExpenseListFilters): Record<stri
 export const expenseService = {
   async list(filters: ExpenseListFilters): Promise<ExpensePageResponse> {
     if (filters.paymentMethodId !== undefined) {
-      return filterPage<ExpenseResponse>(
-        (expense) =>
-          expense.paymentMethodId === filters.paymentMethodId,
-        filters.page, filters.size,
+      const matches = await loadPaymentMethodMatches<ExpenseResponse>(
+        filters.paymentMethodId,
         (page, size) => expenseService.list({ ...filters, paymentMethodId: undefined, page, size }),
       )
+      const content = matches.slice(filters.page * filters.size, (filters.page + 1) * filters.size)
+      return {
+        content,
+        page: filters.page,
+        size: filters.size,
+        totalElements: matches.length,
+        totalPages: Math.ceil(matches.length / filters.size),
+        filteredTotalAmount: matches.reduce((total, expense) => total + expense.amount, 0),
+        recordsCount: content.length,
+      }
     }
     return parseResponse(
       expensePageResponseSchema,

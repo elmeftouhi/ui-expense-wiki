@@ -10,6 +10,7 @@ import { useCategoryOptions } from '@/features/budgets/hooks/useCategoryOptions'
 import { CategoryTreeSelect } from '@/features/categories/components/CategoryTreeSelect'
 import { PaymentMethodSelect } from '@/features/payment-methods/PaymentMethodSelect'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { formatTenantCurrency } from '@/lib/formatters'
 import { ExpenseTable } from '../components/ExpenseTable'
 import { useExpenses } from '../hooks/useExpenses'
 import type { ExpenseListFilters, ExpenseSortField, ExpenseType, SortDirection } from '../types'
@@ -27,10 +28,12 @@ export function ExpensesPage() {
   const [filters, setFilters] = useState<ExpenseListFilters>(defaultFilters)
   const [search, setSearch] = useState('')
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
+  const [selectedParentIds, setSelectedParentIds] = useState<number[]>([])
   const resetFilters = useCallback(() => {
     setFilters(defaultFilters())
     setSearch('')
     setMoreFiltersOpen(false)
+    setSelectedParentIds([])
   }, [])
   useResetOnTenantChange(resetFilters)
   const expenses = useExpenses(filters)
@@ -55,6 +58,7 @@ export function ExpensesPage() {
     for (let next = index + 1; next < categories.options.length && categories.options[next].depth > categories.options[index].depth; next++) {
       branch.push(categories.options[next].id)
     }
+    if (branch.length > 1) setSelectedParentIds((current) => [...new Set([...current, id])])
     setFilters((current) => ({ ...current, categoryIds: [...new Set([...(current.categoryIds ?? []), ...branch])], page: 0 }))
   }
 
@@ -120,7 +124,7 @@ export function ExpensesPage() {
           </div>
           {!!filters.categoryIds?.length && (
             <div role="group" aria-label="Selected categories" className="flex flex-wrap items-center gap-2">
-              {filters.categoryIds.map((id) => {
+              {filters.categoryIds.filter((id) => !selectedParentIds.includes(id)).map((id) => {
                 const category = categories.options.find((option) => option.id === id)
                 const name = category?.name ?? `Category #${id}`
                 return (
@@ -132,7 +136,10 @@ export function ExpensesPage() {
                   </Badge>
                 )
               })}
-              <Button type="button" variant="ghost" size="sm" onClick={() => updateFilter('categoryIds', undefined)}>Clear categories</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => {
+                updateFilter('categoryIds', undefined)
+                setSelectedParentIds([])
+              }}>Clear categories</Button>
             </div>
           )}
           <div id="expense-more-filters" hidden={!moreFiltersOpen}>
@@ -197,9 +204,18 @@ export function ExpensesPage() {
         <Card><CardContent className="space-y-3 p-8 text-center"><ReceiptText className="mx-auto h-8 w-8 text-muted-foreground" /><p role="alert" className="text-sm text-destructive">{getApiErrorMessage(expenses.error, 'Expenses could not be loaded.')}</p><Button variant="outline" onClick={() => void expenses.refetch()}>Try again</Button></CardContent></Card>
       ) : (
         <>
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
             <p className="text-muted-foreground">{expenses.data?.totalElements ?? 0} expenses</p>
-            <p className="text-xs text-muted-foreground">Workspace currency: {activeTenant.currency}</p>
+            <div className="flex flex-wrap items-baseline gap-x-3 ">
+              <span className="text-xs font-medium text-muted-foreground">Filtered total</span>
+              {expenses.data?.filteredTotalAmount !== undefined ? (
+                <span className="text-xl font-semibold tracking-tight text-primary tabular-nums">
+                  {formatTenantCurrency(expenses.data.filteredTotalAmount, activeTenant)}
+                </span>
+              ) : (
+                <span role="alert" className="text-xs text-destructive">Total unavailable: the server did not return a filtered total.</span>
+              )}
+            </div>
           </div>
           <ExpenseTable
             expenses={expenses.data?.content ?? []}

@@ -39,7 +39,7 @@ vi.mock('@/features/payment-methods/usePaymentMethods', () => ({
   }),
 }))
 
-const result: ExpensePageResponse = { content: [], page: 0, size: 25, totalPages: 4, totalElements: 100 }
+const result: ExpensePageResponse = { content: [], page: 0, size: 25, totalPages: 4, totalElements: 100, filteredTotalAmount: 1345.5, recordsCount: 0 }
 let client: QueryClient
 
 beforeEach(() => {
@@ -200,30 +200,28 @@ describe('expense filter requests', () => {
     await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
       params: expect.objectContaining({ categoryIds: '3,5,8,9', page: 0 }),
     }))
-    for (const name of ['Utilities', 'Electricity', 'Home meter', 'Water']) {
+    expect(screen.queryByRole('button', { name: 'Remove Utilities' })).not.toBeInTheDocument()
+    for (const name of ['Electricity', 'Home meter', 'Water']) {
       expect(screen.getByRole('button', { name: `Remove ${name}` })).toBeVisible()
     }
 
     await user.click(screen.getByRole('button', { name: 'Category' }))
     await user.type(screen.getByRole('searchbox', { name: 'Search categories' }), 'Electricity')
     await user.click(screen.getByRole('treeitem', { name: 'Electricity' }))
-    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Remove Electricity' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Next' }))
     await screen.findByText('Page 2 of 4')
-    await user.click(screen.getByRole('button', { name: 'Remove Electricity' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Water' }))
     await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
-      params: expect.objectContaining({ categoryIds: '3,8,9', page: 0 }),
+      params: expect.objectContaining({ categoryIds: '3,5,8', page: 0 }),
     }))
     expect(screen.getByRole('button', { name: 'Remove Home meter' })).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Remove Utilities' }))
-    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
-      params: expect.objectContaining({ categoryIds: '8,9', page: 0 }),
-    }))
 
     await user.click(screen.getByRole('button', { name: 'Category' }))
     await user.click(screen.getByRole('treeitem', { name: 'Travel' }))
     await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
-      params: expect.objectContaining({ categoryIds: '8,9,12', page: 0 }),
+      params: expect.objectContaining({ categoryIds: '3,5,8,12', page: 0 }),
     }))
     await user.click(screen.getByRole('button', { name: 'Clear categories' }))
     await waitFor(() => expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).not.toHaveProperty('categoryIds'))
@@ -242,6 +240,22 @@ describe('expense filter requests', () => {
     await user.click(screen.getByRole('button', { name: 'Remove Travel' }))
     await waitFor(() => expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).not.toHaveProperty('categoryIds'))
     expect(screen.queryByRole('button', { name: 'Clear categories' })).not.toBeInTheDocument()
+  })
+
+  it('displays the backend total across pages and updates it with the applied search', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    expect(await screen.findByText('$1,345.50')).toBeVisible()
+    expect(screen.queryByText(/Workspace currency:/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('Page 2 of 4')
+    expect(screen.getByText('$1,345.50')).toBeVisible()
+    vi.mocked(apiClient.get).mockResolvedValue({ ...result, content: [expense], filteredTotalAmount: 250.75, recordsCount: 1 })
+    await user.type(screen.getByRole('searchbox', { name: 'Search expenses' }), 'bill')
+    expect(await screen.findByText('$250.75')).toBeVisible()
+    vi.mocked(apiClient.get).mockResolvedValue({ ...result, totalElements: 0, totalPages: 0, filteredTotalAmount: 0 })
+    await user.type(screen.getByRole('searchbox', { name: 'Search expenses' }), ' unmatched')
+    expect(await screen.findByText('$0.00')).toBeVisible()
   })
 
   it('debounces search, resets pagination, preserves categories, and clears the search parameter', async () => {

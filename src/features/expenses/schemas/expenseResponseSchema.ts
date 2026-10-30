@@ -41,12 +41,16 @@ export const expensePageResponseSchema = z.object({
   size: pageNumber,
   totalElements: pageNumber,
   totalPages: pageNumber,
+  filteredTotalAmount: numericValue.optional(),
+  recordsCount: pageNumber.optional(),
 }).transform((page) => ({
   content: page.content,
   page: page.page ?? page.number ?? 0,
   size: page.size,
   totalElements: page.totalElements,
   totalPages: page.totalPages,
+  filteredTotalAmount: page.filteredTotalAmount,
+  recordsCount: page.recordsCount,
 }))
 
 const expenseCategoryStatisticSchema: z.ZodType<ExpenseCategoryStatistic> = z.object({

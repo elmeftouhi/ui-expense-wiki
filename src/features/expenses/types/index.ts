@@ -48,6 +48,8 @@ export interface ExpensePageResponse {
   size: number
   totalElements: number
   totalPages: number
+  filteredTotalAmount?: number
+  recordsCount?: number
 }
 
 export interface ExpenseCategoryStatistic {

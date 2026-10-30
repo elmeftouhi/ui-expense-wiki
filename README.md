@@ -405,13 +405,21 @@ records; `/expenses/:expenseId` displays a record and its lifecycle actions.
 The ledger keeps text search and an **Add categories** tree picker visible.
 Search sends the trimmed `search` query parameter after a short debounce.
 Picking a parent adds the parent and all descendant categories, without
-duplicates; selected categories appear as removable chips beneath the search
-row. Removing a chip excludes only that ID, and **Clear categories** removes
+duplicates; selected subcategories appear as removable chips beneath the search
+row. A parent chosen in the picker stays in the request but is not shown as a
+chip. Removing a chip excludes only that ID, and **Clear categories** removes
 the category filter. Requests send comma-separated IDs as `categoryIds=5,8`.
 **More filters** reveals year, month, type, payment status, payment method, and
 rows per page; collapsing it preserves those selections. The active-filter
 count includes the current year and month defaults. Filter changes return to
 the first page.
+
+The result header displays the API's `filteredTotalAmount` in the workspace
+currency, representing all matching expenses rather than just the current page.
+The response also preserves `recordsCount` (the number of records on that page).
+When filtering by payment method locally, the total is calculated from all
+matching records before pagination, not from the unfiltered server aggregate.
+If the server omits the total, the UI explicitly reports that it is unavailable.
 
 Expense entry starts with the category tree picker (see "Category picker").
 Choosing a category focuses the amount field. Descriptions are

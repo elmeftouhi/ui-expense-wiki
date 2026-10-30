@@ -46,6 +46,8 @@ describe('expense API service', () => {
 
     const page = await expenseService.list({ ...filters, search: 'bill', status: 'PAID', paymentMethodId: 1, page: 1, size: 1 })
     expect(page).toMatchObject({ content: [{ id: 11 }], page: 1, size: 1, totalElements: 2, totalPages: 2 })
+    expect(page.filteredTotalAmount).toBe(expense.amount * 2)
+    expect(page.recordsCount).toBe(1)
     expect(get).toHaveBeenCalledTimes(2)
     expect(get).toHaveBeenNthCalledWith(1, '/v1/expenses', {
       params: { year: 2025, month: 2, categoryIds: '3,5', search: 'bill', type: 'SUBSCRIPTION', status: 'PAID', page: 0, size: 100, sort: 'dueDate,asc' },
@@ -59,6 +61,19 @@ describe('expense API service', () => {
     expect(combined.totalElements).toBe(2)
     const empty = await expenseService.list({ ...filters, status: 'PAID', paymentMethodId: 99, page: 0 })
     expect(empty).toMatchObject({ content: [], totalElements: 0, totalPages: 0 })
+    expect(empty.filteredTotalAmount).toBe(0)
+  })
+
+  it('preserves filtered totals and record counts, including decimal strings and zero', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      content: [expense], page: 0, size: 25, totalPages: 2, totalElements: 42,
+      filteredTotalAmount: '1345.50', recordsCount: '1',
+    })
+    await expect(expenseService.list(filters)).resolves.toMatchObject({ filteredTotalAmount: 1345.5, recordsCount: 1 })
+    get.mockResolvedValue({ content: [], page: 0, size: 25, totalPages: 0, totalElements: 0, filteredTotalAmount: 0, recordsCount: 0 })
+    await expect(expenseService.list(filters)).resolves.toMatchObject({ filteredTotalAmount: 0, recordsCount: 0 })
+    get.mockResolvedValue({ content: [], page: 0, size: 25, totalPages: 0, totalElements: 0, filteredTotalAmount: 'invalid' })
+    await expect(expenseService.list(filters)).rejects.toThrow('invalid expense data')
   })
 
   it('surfaces failures from later pages when combining status and payment method filters', async () => {
