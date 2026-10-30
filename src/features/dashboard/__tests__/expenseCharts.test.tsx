@@ -21,6 +21,7 @@ vi.mock('recharts', () => ({
 const daily = {
   year: 2026, month: 10,
   totals: [{ day: 1, total: 4.8 }, { day: 2, total: 0 }, { day: 3, total: 246.99 }],
+  previousMonthTotals: [{ day: 1, total: 12 }, { day: 3, total: 50 }, { day: 30, total: 7 }],
 }
 const monthly = {
   year: 2026,
@@ -70,6 +71,10 @@ describe('expense chart service', () => {
     ])
     get.mockResolvedValue({ ...daily, totals: [{ day: 1, total: 'invalid' }] })
     await expect(chartService.daily(1, 2026, 10)).rejects.toThrow('invalid chart data')
+    get.mockResolvedValue({ ...daily, previousMonthTotals: [{ day: 1, total: 'invalid' }] })
+    await expect(chartService.daily(1, 2026, 10)).rejects.toThrow('invalid chart data')
+    get.mockResolvedValue({ year: 2026, month: 10, totals: [] })
+    expect((await chartService.daily(1, 2026, 10)).previousMonthTotals).toEqual([])
     get.mockResolvedValue({ ...monthly, previousYearTotals: undefined })
     await expect(chartService.monthly(1, 2026)).rejects.toThrow('invalid chart data')
   })
@@ -83,7 +88,15 @@ describe('live spending chart', () => {
     renderChart()
     expect(screen.getByRole('status')).toHaveTextContent('Loading spending chart')
     const chart = await screen.findByTestId('chart-data')
-    expect(JSON.parse(chart.textContent!)).toMatchObject(daily.totals)
+    const points = JSON.parse(chart.textContent!)
+    expect(points).toHaveLength(31)
+    expect(points.slice(0, 3)).toMatchObject([
+      { day: 1, total: 4.8, previousTotal: 12 },
+      { day: 2, total: 0, previousTotal: 0 },
+      { day: 3, total: 246.99, previousTotal: 50 },
+    ])
+    expect(points[29]).toMatchObject({ day: 30, total: 0, previousTotal: 7 })
+    expect(points[30]).toMatchObject({ day: 31, total: 0, previousTotal: 0 })
     expect(screen.getByText('$251.79')).toBeInTheDocument()
     expect(screen.getByText('$83.93')).toBeInTheDocument()
     expect(get).toHaveBeenLastCalledWith('/v1/expenses/charts/daily', expect.objectContaining({
@@ -128,13 +141,25 @@ describe('live spending chart', () => {
   it('renders empty responses explicitly but retains all-zero periods as real chart data', async () => {
     const user = userEvent.setup()
     vi.spyOn(apiClient, 'get')
-      .mockResolvedValueOnce({ ...daily, totals: [] })
+      .mockResolvedValueOnce({ ...daily, totals: [], previousMonthTotals: [] })
       .mockResolvedValue({ ...monthly, totals: [{ month: 1, total: 0 }], previousYearTotals: [{ month: 1, total: 0 }] })
     renderChart()
     await screen.findByText('No spending data for this period.')
     await user.click(screen.getByRole('button', { name: 'Monthly Totals' }))
     expect(await screen.findByTestId('chart-data')).toHaveTextContent('"amount":0')
     expect(screen.queryByText('No spending data for this period.')).not.toBeInTheDocument()
+  })
+
+  it('sizes the daily axis to the current month length and keeps previous-only data visible', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      year: 2026, month: 2, totals: [],
+      previousMonthTotals: [{ day: 28, total: 9 }, { day: 31, total: 99 }],
+    })
+    renderChart()
+    const points = JSON.parse((await screen.findByTestId('chart-data')).textContent!)
+    expect(points).toHaveLength(28)
+    expect(points[27]).toMatchObject({ day: 28, total: 0, previousTotal: 9 })
+    expect(points.every((p: { total: number }) => p.total === 0)).toBe(true)
   })
 
   it('isolates tenants and refreshes chart data after expense invalidation', async () => {

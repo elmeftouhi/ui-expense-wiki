@@ -72,27 +72,50 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
     })
   }, [monthlyQuery.data, locale])
 
-  const dailyData = useMemo(() => {
-    if (!dailyQuery.data) return []
-    const response = dailyQuery.data
-    return [...response.totals].sort((a, b) => a.day - b.day).map((point) => ({
-      ...point,
-      label: new Date(response.year, response.month - 1, point.day)
-        .toLocaleDateString(locale, { month: 'short', day: 'numeric' }),
-    }))
-  }, [dailyQuery.data, locale])
+  const dailyHasData = !!dailyQuery.data
+    && (dailyQuery.data.totals.length > 0 || dailyQuery.data.previousMonthTotals.length > 0)
 
-  // Summary statistics for Daily Tab
+  // One point per day of the selected month; previous month is aligned by day number.
+  const dailyData = useMemo(() => {
+    if (!dailyQuery.data || !dailyHasData) return []
+    const { year, month, totals, previousMonthTotals } = dailyQuery.data
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const sumByDay = (points: { day: number; total: number }[]) => {
+      const map = new Map<number, number>()
+      for (const p of points) map.set(p.day, (map.get(p.day) ?? 0) + p.total)
+      return map
+    }
+    const current = sumByDay(totals)
+    const previous = sumByDay(previousMonthTotals)
+    return Array.from({ length: daysInMonth }, (_, idx) => {
+      const day = idx + 1
+      return {
+        day,
+        total: current.get(day) ?? 0,
+        previousTotal: previous.get(day) ?? 0,
+        label: new Date(year, month - 1, day)
+          .toLocaleDateString(locale, { month: 'short', day: 'numeric' }),
+      }
+    })
+  }, [dailyQuery.data, dailyHasData, locale])
+
+  // Summary statistics for Daily Tab (based on days reported by the API for the current month)
   const dailyStats = useMemo(() => {
-    const total = dailyData.reduce((acc, d) => acc + d.total, 0)
-    const count = dailyData.length
-    const avg = count > 0 ? total / count : 0
-    let peak = dailyData[0]
-    for (const d of dailyData) {
+    const reportedDays = new Set(dailyQuery.data?.totals.map((p) => p.day) ?? [])
+    const points = dailyData.filter((d) => reportedDays.has(d.day))
+    const total = points.reduce((acc, d) => acc + d.total, 0)
+    const avg = points.length > 0 ? total / points.length : 0
+    let peak = points[0]
+    for (const d of points) {
       if (!peak || d.total > peak.total) peak = d
     }
     return { total, avg, peak }
-  }, [dailyData])
+  }, [dailyData, dailyQuery.data])
+
+  const previousMonthLabel = useMemo(() => {
+    const date = new Date(activeMonthOption.year, activeMonthOption.month - 2, 1)
+    return date.toLocaleDateString(locale, { month: 'short', year: 'numeric' })
+  }, [activeMonthOption.year, activeMonthOption.month, locale])
 
   // Summary statistics for Monthly Tab
   const monthlyStats = useMemo(() => {
@@ -147,7 +170,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
             </div>
             <CardDescription className="text-xs">
               {activeTab === 'daily'
-                ? `Daily spending breakdown for ${activeMonthOption.label}.`
+                ? `Daily spending for ${activeMonthOption.label} compared with the previous month.`
                 : `Monthly expenditure totals and previous-year comparisons for ${selectedYear}.`}
             </CardDescription>
           </div>
@@ -350,7 +373,7 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             {activeTab === 'daily' ? (
-              /* DAILY BAR CHART */
+              /* DAILY CHART: current month vs previous month bars */
               <BarChart
                 data={dailyData}
                 margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
@@ -386,29 +409,55 @@ export const SpendingTrendChart: React.FC<SpendingTrendChartProps> = ({
                       day: number
                       label: string
                       total: number
+                      previousTotal: number
                     }
 
                     return (
-                      <div className="rounded-xl border border-border/80 bg-card text-card-foreground p-3 shadow-xl text-xs space-y-1.5 min-w-[170px]">
+                      <div className="rounded-xl border border-border/80 bg-card text-card-foreground p-3 shadow-xl text-xs space-y-1.5 min-w-[190px]">
                         <div className="flex items-center justify-between border-b border-border/60 pb-1">
                           <span className="font-semibold text-foreground">
                             {item.label}, {activeMonthOption.year}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 pt-0.5">
-                          <span className="text-muted-foreground">Daily Spend:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#2563eb]" />
+                            <span className="text-muted-foreground">Current Month:</span>
+                          </div>
                           <span className="font-mono font-bold text-foreground">
                             {formatCurrency(item.total, { currency, locale })}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#94a3b8]" />
+                            <span className="text-muted-foreground">
+                              Previous Month (day {item.day}, {previousMonthLabel}):
+                            </span>
+                          </div>
+                          <span className="font-mono text-muted-foreground">
+                            {formatCurrency(item.previousTotal, { currency, locale })}
                           </span>
                         </div>
                       </div>
                     )
                   }}
                 />
+                <Legend
+                  verticalAlign="top"
+                  align="right"
+                  wrapperStyle={{ paddingBottom: '12px', fontSize: '11px' }}
+                />
                 <Bar
                   dataKey="total"
-                  name="Daily Spend"
+                  name="Current Month"
                   fill="#2563eb"
+                  radius={[3, 3, 0, 0]}
+                />
+                <Bar
+                  dataKey="previousTotal"
+                  name="Previous Month"
+                  fill="#94a3b8"
                   radius={[3, 3, 0, 0]}
                 />
               </BarChart>

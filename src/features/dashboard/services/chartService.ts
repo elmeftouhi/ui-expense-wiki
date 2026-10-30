@@ -8,10 +8,12 @@ const total = z.union([
 const monthTotal = z.object({ month: z.number().int().min(1).max(12), total })
 const year = z.number().int().min(1).max(9999)
 
+const dayTotal = z.object({ day: z.number().int().min(1).max(31), total })
 const dailyChartSchema = z.object({
   year,
   month: z.number().int().min(1).max(12),
-  totals: z.array(z.object({ day: z.number().int().min(1).max(31), total })),
+  totals: z.array(dayTotal),
+  previousMonthTotals: z.array(dayTotal).nullish().transform((v) => v ?? []),
 })
 const monthlyChartSchema = z.object({
   year,
