@@ -76,6 +76,57 @@ describe('workspace settings', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
+  it('switches across desktop rail sections while preserving unsaved drafts and toggling channel pills', async () => {
+    const user = userEvent.setup()
+    mount()
+    await screen.findByLabelText('Currency')
+    expect(screen.getByRole('button', { name: 'Financial' })).toHaveAttribute('aria-current', 'page')
+
+    // Edit Currency in Financial, visit Payment methods, then Alerts & reminders
+    await user.selectOptions(screen.getByLabelText('Currency'), 'EUR')
+    await user.click(screen.getByRole('button', { name: /Payment methods/ }))
+    expect(screen.getByRole('heading', { name: 'Payment methods' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Alerts & reminders' }))
+    expect(screen.getByRole('button', { name: 'Alerts & reminders' })).toHaveAttribute('aria-current', 'page')
+    await user.click(screen.getByRole('button', { name: 'EMAIL' }))
+    expect(screen.getByLabelText('Notification channels')).toHaveValue('IN_APP, EMAIL')
+
+    // Return to Financial — EUR draft is still preserved
+    await user.click(screen.getByRole('button', { name: 'Financial' }))
+    expect(screen.getByLabelText('Currency')).toHaveValue('EUR')
+  })
+
+  it('presents a native drill-down menu list on mobile viewports with live summaries', async () => {
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+
+    try {
+      const user = userEvent.setup()
+      mount()
+      expect(await screen.findByText('USD · 2 decimals')).toBeInTheDocument()
+      expect(screen.getByText('English · UTC · 24h')).toBeInTheDocument()
+      expect(screen.getByText('80% budget alert')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: /Regional/ }))
+      expect(screen.getByLabelText('Timezone')).toHaveValue('UTC')
+
+      await user.click(screen.getByRole('button', { name: 'All settings' }))
+      expect(screen.getByText('USD · 2 decimals')).toBeInTheDocument()
+    } finally {
+      window.matchMedia = originalMatchMedia
+    }
+  })
+
   it('saves encoded lists and uses the server response as the new baseline', async () => {
     const pending = deferred<TenantConfiguration>()
     vi.mocked(configurationService.update).mockReturnValue(pending.promise)
@@ -97,13 +148,14 @@ describe('workspace settings', () => {
     expect(client.getQueryData(queryKeys.tenantScope(1).configuration.general())).toMatchObject({ budgetAlertThreshold: 90 })
   })
 
-  it('displays validation failures without updating', async () => {
+  it('displays validation failures, jumps to the section with errors, and avoids updating', async () => {
     mount()
     await screen.findByLabelText('Currency')
     await edit('Payment reminder days', '3, -7')
     await edit('Budget alert threshold (%)', '101')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(await screen.findByText(/Enter whole, non-negative days/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alerts & reminders' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByLabelText('Budget alert threshold (%)')).toHaveAttribute('aria-invalid', 'true')
     expect(configurationService.update).not.toHaveBeenCalled()
   })
