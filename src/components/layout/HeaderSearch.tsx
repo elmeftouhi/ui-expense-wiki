@@ -1,33 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Clock, X, Trash2, ArrowRight } from 'lucide-react'
+import { Search, Clock, X, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const DEFAULT_HISTORY = [
-  'Software & Cloud Infrastructure budget',
-  'Cloud Infrastructure Hosting',
-  'Software subscriptions',
-  'Travel expenses Q3',
-]
-
 const STORAGE_KEY = 'expense_wiki_search_history'
+
+function readStoredHistory(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (!saved) return []
+    const parsed: unknown = JSON.parse(saved)
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 6)
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return []
+}
+
+function detectMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
+}
 
 export const HeaderSearch: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [history, setHistory] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) return JSON.parse(saved)
-    } catch {
-      // ignore
-    }
-    return DEFAULT_HISTORY
-  })
+  const [history, setHistory] = useState<string[]>(readStoredHistory)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
+  const isMac = detectMacPlatform()
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
@@ -44,8 +50,30 @@ export const HeaderSearch: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    function handleGlobalKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        const activeModal = document.querySelector('[role="dialog"][aria-modal="true"]')
+        if (activeModal && !containerRef.current?.contains(activeModal)) {
+          return
+        }
+        event.preventDefault()
+        setIsOpen((prev) => !prev)
+        return
+      }
+
+      if (event.key === 'Escape' && isOpen) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleGlobalKeyDown)
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [isOpen])
+
+  useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 50)
+      const id = window.setTimeout(() => inputRef.current?.focus(), 20)
+      return () => window.clearTimeout(id)
     }
   }, [isOpen])
 
@@ -54,7 +82,7 @@ export const HeaderSearch: React.FC = () => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
     } catch {
-      // ignore
+      // ignore storage errors
     }
   }
 
@@ -62,27 +90,30 @@ export const HeaderSearch: React.FC = () => {
     const trimmed = searchTerm.trim()
     if (!trimmed) return
 
-    const updated = [trimmed, ...history.filter((item) => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, 8)
+    const updated = [
+      trimmed,
+      ...history.filter((item) => item.toLowerCase() !== trimmed.toLowerCase()),
+    ].slice(0, 6)
     saveHistory(updated)
     setIsOpen(false)
     setQuery('')
 
-    // Navigate to expenses with search term
     navigate(`/expenses?search=${encodeURIComponent(trimmed)}`)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      e.preventDefault()
       handleSearch(query)
     } else if (e.key === 'Escape') {
+      e.preventDefault()
       setIsOpen(false)
     }
   }
 
   const removeHistoryItem = (e: React.MouseEvent, itemToRemove: string) => {
     e.stopPropagation()
-    const updated = history.filter((item) => item !== itemToRemove)
-    saveHistory(updated)
+    saveHistory(history.filter((item) => item !== itemToRemove))
   }
 
   const clearAllHistory = () => {
@@ -91,91 +122,83 @@ export const HeaderSearch: React.FC = () => {
 
   return (
     <div className="relative" ref={containerRef}>
-      {/* Search Trigger Icon Button */}
       <button
         type="button"
         id="header-search-trigger"
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
-          'relative flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-background/80 hover:bg-accent/60 transition-colors text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring',
-          isOpen && 'bg-accent text-foreground ring-2 ring-ring/40',
+          'flex h-9 w-9 sm:w-48 lg:w-60 items-center justify-center sm:justify-between gap-2 rounded-lg border border-border/70 bg-muted/35 sm:px-2.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring',
+          isOpen && 'bg-accent/70 text-foreground ring-2 ring-ring/30',
         )}
-        title="Search (expenses, categories, receipts)"
-        aria-label="Search"
+        title={`Search expenses (${isMac ? '⌘K' : 'Ctrl+K'})`}
+        aria-label="Search expenses"
         aria-expanded={isOpen}
       >
-        <Search className="h-4 w-4" />
+        <span className="flex items-center gap-2 min-w-0">
+          <Search className="h-4 w-4 sm:h-3.5 sm:w-3.5 shrink-0" />
+          <span className="hidden sm:inline truncate text-xs">Search expenses…</span>
+        </span>
+        <kbd className="hidden md:inline-flex items-center rounded border border-border/80 bg-background/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground shrink-0">
+          {isMac ? '⌘K' : 'Ctrl K'}
+        </kbd>
       </button>
 
-      {/* Search Popover with History */}
       {isOpen && (
         <div
           role="dialog"
-          aria-label="Search and history"
-          className="fixed inset-x-3 top-17 z-50 rounded-xl border border-border bg-card text-card-foreground shadow-2xl animate-in fade-in-50 zoom-in-95 overflow-x-hidden sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-96 sm:max-w-[calc(100vw-2rem)] sm:shadow-xl"
+          aria-label="Search expenses"
+          className="fixed inset-x-3 top-15 z-50 rounded-xl border border-border bg-popover text-popover-foreground shadow-xl animate-in fade-in-50 zoom-in-95 overflow-hidden sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-96 sm:max-w-[calc(100vw-2rem)]"
         >
-          {/* Search Input Header */}
-          <div className="p-3 border-b border-border/60">
+          <div className="p-2.5 border-b border-border/60">
             <div className="relative flex items-center">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Search className="absolute left-3 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Search expenses, receipts, categories..."
-                className="w-full h-9 pl-9 pr-8 text-xs rounded-lg border border-input bg-background/60 focus:bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
+                onKeyDown={handleInputKeyDown}
+                placeholder="Search merchant, note, or reference…"
+                className="w-full h-9 pl-8.5 pr-8 text-xs rounded-lg border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40 transition-all"
               />
-              {query ? (
+              {query && (
                 <button
                   type="button"
                   onClick={() => setQuery('')}
-                  className="absolute right-2.5 p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer"
-                  aria-label="Clear input"
+                  className="absolute right-2 p-1 rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label="Clear search query"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
-              ) : null}
+              )}
             </div>
 
             {query.trim().length > 0 && (
               <button
                 type="button"
                 onClick={() => handleSearch(query)}
-                className="mt-2 w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/15 text-primary text-xs font-medium transition-colors cursor-pointer"
+                className="mt-2 w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/15 text-primary text-xs font-medium transition-colors cursor-pointer"
               >
-                <span className="truncate">Search for &ldquo;{query.trim()}&rdquo;</span>
-                <ArrowRight className="w-3.5 h-3.5 shrink-0 ml-1" />
+                <span className="truncate">Search expenses for &ldquo;{query.trim()}&rdquo;</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0 ml-2" />
               </button>
             )}
           </div>
 
-          {/* Search History Section */}
-          <div className="p-2 overflow-x-hidden">
-            <div className="flex items-center justify-between px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3 h-3 text-muted-foreground" />
-                Recent Searches
-              </span>
-              {history.length > 0 && (
+          {history.length > 0 ? (
+            <div className="p-1.5">
+              <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                <span>Recent</span>
                 <button
                   type="button"
                   onClick={clearAllHistory}
-                  className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors cursor-pointer"
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
-                  <Trash2 className="w-2.5 h-2.5" />
-                  <span>Clear history</span>
+                  Clear
                 </button>
-              )}
-            </div>
-
-            {history.length === 0 ? (
-              <div className="py-6 text-center text-xs text-muted-foreground">
-                No recent searches.
               </div>
-            ) : (
-              <div className="space-y-0.5 mt-1">
+
+              <div className="space-y-0.5">
                 {history.map((item) => (
                   <div
                     key={item}
@@ -185,30 +208,31 @@ export const HeaderSearch: React.FC = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSearch(item)
                     }}
-                    className="group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent/70 transition-colors cursor-pointer text-foreground w-full min-w-0"
+                    className="group flex items-center justify-between px-2 py-1.5 rounded-lg text-xs hover:bg-accent/70 transition-colors cursor-pointer text-foreground w-full min-w-0"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
-                      <Clock className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                    <span className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                      <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <span className="truncate">{item}</span>
-                    </div>
+                    </span>
                     <button
                       type="button"
                       onClick={(e) => removeHistoryItem(e, item)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all cursor-pointer shrink-0"
-                      title="Remove from history"
-                      aria-label={`Remove ${item} from history`}
+                      className="sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-opacity cursor-pointer shrink-0"
+                      aria-label={`Remove ${item} from recent searches`}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div className="p-2 border-t border-border/60 bg-muted/30 text-[10px] text-muted-foreground text-center">
-            Press <kbd className="font-mono bg-muted px-1 rounded border border-border">Enter</kbd> to search ledger & transactions
-          </div>
+            </div>
+          ) : (
+            !query.trim() && (
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                Press <kbd className="font-mono bg-muted px-1 py-0.5 rounded border border-border/80 text-[10px]">Enter</kbd> to filter expenses across your workspace.
+              </div>
+            )
+          )}
         </div>
       )}
     </div>

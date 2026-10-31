@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Link } from 'react-router-dom'
 import {
   Bell,
   CheckCircle2,
@@ -7,7 +6,6 @@ import {
   AlertTriangle,
   UserPlus,
   CheckCheck,
-  ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -61,18 +59,28 @@ export const HeaderNotifications: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!isOpen) return
+
     function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
     }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('touchstart', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('touchstart', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [])
+  }, [isOpen])
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -102,43 +110,39 @@ export const HeaderNotifications: React.FC = () => {
 
   return (
     <div className="relative" ref={containerRef}>
-      {/* Bell Trigger Button */}
       <button
         type="button"
         id="header-notifications-trigger"
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
-          'relative flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-background/80 hover:bg-accent/60 transition-colors text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring',
-          isOpen && 'bg-accent text-foreground ring-2 ring-ring/40',
+          'relative flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-background hover:bg-accent/60 transition-colors text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring',
+          isOpen && 'bg-accent/70 text-foreground ring-2 ring-ring/30',
         )}
         title="Notifications"
-        aria-label={`Notifications (${unreadCount} unread)`}
+        aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
         aria-expanded={isOpen}
       >
         <Bell className="h-4 w-4" />
 
-        {/* Unread badge count */}
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs animate-in zoom-in-50">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground shadow-xs">
             {unreadCount}
           </span>
         )}
       </button>
 
-      {/* Notifications Popover */}
       {isOpen && (
         <div
           role="region"
-          aria-label="Notifications list"
-          className="fixed inset-x-3 top-17 z-50 rounded-xl border border-border bg-card text-card-foreground shadow-2xl animate-in fade-in-50 zoom-in-95 overflow-hidden sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-96 sm:max-w-[calc(100vw-2rem)] sm:shadow-xl"
+          aria-label="Notifications"
+          className="fixed inset-x-3 top-15 z-50 rounded-xl border border-border bg-popover text-popover-foreground shadow-xl animate-in fade-in-50 zoom-in-95 overflow-hidden sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-96 sm:max-w-[calc(100vw-2rem)]"
         >
-          {/* Header */}
-          <div className="p-3 border-b border-border/60 flex items-center justify-between">
+          <div className="px-3.5 py-2.5 border-b border-border/60 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-xs text-foreground">Notifications</span>
               {unreadCount > 0 && (
                 <span className="rounded-full bg-primary/10 text-primary text-[10px] font-semibold px-2 py-0.5">
-                  {unreadCount} new
+                  {unreadCount} unread
                 </span>
               )}
             </div>
@@ -147,7 +151,7 @@ export const HeaderNotifications: React.FC = () => {
               <button
                 type="button"
                 onClick={markAllAsRead}
-                className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer"
+                className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 <span>Mark all read</span>
@@ -155,11 +159,10 @@ export const HeaderNotifications: React.FC = () => {
             )}
           </div>
 
-          {/* Notifications List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-border/40">
+          <div className="max-h-80 overflow-y-auto divide-y divide-border/50">
             {notifications.length === 0 ? (
               <div className="py-8 text-center text-xs text-muted-foreground">
-                No notifications to display.
+                You&apos;re all caught up.
               </div>
             ) : (
               notifications.map((item) => (
@@ -169,19 +172,22 @@ export const HeaderNotifications: React.FC = () => {
                   tabIndex={0}
                   onClick={() => markAsRead(item.id)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') markAsRead(item.id)
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      markAsRead(item.id)
+                    }
                   }}
                   className={cn(
-                    'flex items-start gap-3 p-3 transition-colors text-left cursor-pointer hover:bg-accent/60',
-                    !item.read && 'bg-primary/5',
+                    'flex items-start gap-3 px-3.5 py-2.5 transition-colors text-left cursor-pointer hover:bg-accent/50',
+                    !item.read && 'bg-primary/[0.04]',
                   )}
                 >
-                  <div className="p-1.5 rounded-lg bg-background border border-border/60 shrink-0 mt-0.5">
+                  <div className="p-1.5 rounded-lg bg-muted/60 border border-border/60 shrink-0 mt-0.5">
                     {getNotificationIcon(item.type)}
                   </div>
 
                   <div className="flex-1 min-w-0 space-y-0.5">
-                    <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center justify-between gap-2">
                       <p
                         className={cn(
                           'text-xs truncate',
@@ -202,25 +208,13 @@ export const HeaderNotifications: React.FC = () => {
 
                   {!item.read && (
                     <span
-                      className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5"
+                      className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5"
                       title="Unread"
                     />
                   )}
                 </div>
               ))
             )}
-          </div>
-
-          {/* Bottom Footer: Link to Display All */}
-          <div className="p-2 border-t border-border/60 bg-muted/30">
-            <Link
-              to="/dashboard"
-              onClick={() => setIsOpen(false)}
-              className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10 transition-colors text-center"
-            >
-              <span>View all notifications</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { Outlet, Navigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
@@ -6,10 +6,34 @@ import { MobileNav } from './MobileNav'
 import { useActiveTenant } from '@/features/tenants'
 import { useAuth } from '@/features/auth'
 
+const SIDEBAR_COLLAPSED_KEY = 'expense_wiki_sidebar_collapsed'
+
+function readSidebarCollapsed(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
 export const AppShell: React.FC = () => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readSidebarCollapsed)
   const { activeTenant, isSwitching } = useActiveTenant()
   const { isAuthenticated, isLoading } = useAuth()
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next))
+      } catch {
+        // ignore storage errors
+      }
+      return next
+    })
+  }, [])
 
   if (isLoading) {
     return (
@@ -31,7 +55,10 @@ export const AppShell: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-background font-sans text-foreground antialiased">
       {/* Desktop Sidebar */}
-      <Sidebar />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
+      />
 
       {/* Mobile Drawer */}
       <MobileNav

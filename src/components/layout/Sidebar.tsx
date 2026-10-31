@@ -1,183 +1,150 @@
 import React from 'react'
-import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  Receipt,
-  Tags,
-  ScanLine,
-  Building,
-  Settings,
-  ShieldCheck,
-  ChevronRight,
-  PiggyBank,
-  CalendarClock,
-} from 'lucide-react'
+import { Link, NavLink } from 'react-router-dom'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useActiveTenant } from '@/features/tenants'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import {
+  PRIMARY_NAV_ITEMS,
+  WORKSPACE_NAV_ITEMS,
+  type AppNavItem,
+} from './navigationConfig'
 
-interface NavItem {
-  name: string
-  to: string
-  icon: React.ComponentType<{ className?: string }>
-  badge?: string
-  adminOnly?: boolean
+interface SidebarProps {
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
-const PRIMARY_NAV_ITEMS: NavItem[] = [
-  { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-  { name: 'Expenses', to: '/expenses', icon: Receipt },
-  { name: 'Budgets', to: '/budgets', icon: PiggyBank },
-  { name: 'Subscriptions', to: '/subscriptions', icon: CalendarClock },
-  { name: 'Categories', to: '/categories', icon: Tags },
-  { name: 'Receipt Scanning', to: '/receipts', icon: ScanLine },
-]
+export const Sidebar: React.FC<SidebarProps> = ({
+  collapsed = false,
+  onToggleCollapse,
+}) => {
+  const { isAdmin } = useActiveTenant()
 
-const ADMIN_NAV_ITEMS: NavItem[] = [
-  { name: 'Tenant Management', to: '/tenants', icon: Building, adminOnly: true },
-  { name: 'Settings', to: '/settings', icon: Settings },
-]
+  const renderNavItem = (item: AppNavItem) => {
+    const Icon = item.icon
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.to === '/'}
+        title={collapsed ? item.name : undefined}
+        aria-label={collapsed ? item.name : undefined}
+        className={({ isActive }) =>
+          cn(
+            'group relative flex items-center rounded-lg text-[13px] transition-colors',
+            collapsed
+              ? 'h-9 w-9 mx-auto justify-center'
+              : 'min-h-9 justify-between px-2.5 py-1.5',
+            isActive
+              ? 'bg-primary/10 text-primary font-semibold dark:bg-primary/15'
+              : 'text-muted-foreground font-medium hover:bg-muted/70 hover:text-foreground',
+          )
+        }
+      >
+        {({ isActive }) => (
+          <>
+            <span className={cn('flex items-center min-w-0', !collapsed && 'gap-2.5')}>
+              <Icon
+                className={cn(
+                  'h-4 w-4 shrink-0 transition-colors',
+                  isActive
+                    ? 'text-primary'
+                    : 'text-muted-foreground group-hover:text-foreground',
+                )}
+              />
+              {!collapsed && <span className="truncate">{item.name}</span>}
+            </span>
 
-export const Sidebar: React.FC = () => {
-  const { activeTenant, currentRole, isAdmin } = useActiveTenant()
+            {!collapsed && item.adminOnly && !isAdmin && (
+              <span className="rounded border border-border/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                Admin
+              </span>
+            )}
+          </>
+        )}
+      </NavLink>
+    )
+  }
 
   return (
-    <aside className="hidden lg:flex w-64 shrink-0 flex-col sticky top-0 h-screen h-dvh border-r border-border/80 bg-card/60 backdrop-blur-sm select-none z-30">
-      {/* Brand Header */}
-      <div className="flex h-16 shrink-0 items-center gap-3 px-6 border-b border-border/60">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm font-bold text-lg">
-          ₩
-        </div>
-        <div className="flex flex-col">
-          <span className="font-bold tracking-tight text-foreground text-sm">
-            expense<span className="text-primary">.wiki</span>
-          </span>
-          <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-            Multi-Tenant Platform
-          </span>
-        </div>
+    <aside
+      aria-label="Primary navigation"
+      className={cn(
+        'hidden lg:flex shrink-0 flex-col sticky top-0 h-screen h-dvh border-r border-border/70 bg-card/40 select-none z-30 transition-[width] duration-200 ease-out',
+        collapsed ? 'w-16' : 'w-60',
+      )}
+    >
+      {/* Brand Header (matches h-14 top Header) */}
+      <div
+        className={cn(
+          'flex h-14 shrink-0 items-center border-b border-border/70',
+          collapsed ? 'justify-center px-2' : 'justify-between px-4',
+        )}
+      >
+        <Link
+          to="/"
+          className="flex items-center gap-2.5 min-w-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+          aria-label="expense.wiki home"
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm shadow-xs">
+            ₩
+          </div>
+          {!collapsed && (
+            <span className="font-bold tracking-tight text-foreground text-sm truncate">
+              expense<span className="text-primary">.wiki</span>
+            </span>
+          )}
+        </Link>
       </div>
 
-      {/* Nav Content with independent scroll */}
-      <div className="flex-1 min-h-0 flex flex-col justify-between p-4 overflow-y-auto overscroll-contain custom-scrollbar">
-        <div className="space-y-6">
-          {/* Main Expense Management Nav */}
-          <div>
-            <div className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Expense Operations
-            </div>
-            <nav className="space-y-1">
-              {PRIMARY_NAV_ITEMS.map((item) => {
-                const Icon = item.icon
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/'}
-                    className={({ isActive }) =>
-                      cn(
-                        'group flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-all',
-                        isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-accent/80 hover:text-foreground',
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <div className="flex items-center gap-2.5">
-                          <Icon
-                            className={cn(
-                              'h-4 w-4 shrink-0 transition-transform group-hover:scale-105',
-                              isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
-                            )}
-                          />
-                          <span>{item.name}</span>
-                        </div>
-                        {isActive && <ChevronRight className="h-3 w-3 opacity-70" />}
-                      </>
-                    )}
-                  </NavLink>
-                )
-              })}
-            </nav>
-          </div>
+      {/* Navigation Links */}
+      <div
+        className={cn(
+          'flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar py-3',
+          collapsed ? 'px-2' : 'px-3',
+        )}
+      >
+        <nav aria-label="Main sections" className="space-y-0.5">
+          {PRIMARY_NAV_ITEMS.map(renderNavItem)}
+        </nav>
 
-          {/* Tenant Administration & Settings (Separated per requirements) */}
-          <div>
-            <div className="px-3 mb-2 flex items-center justify-between text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              <span>Administration</span>
-              <span className="text-[9px] lowercase font-normal opacity-70">separate scope</span>
-            </div>
-            <nav className="space-y-1">
-              {ADMIN_NAV_ITEMS.map((item) => {
-                const Icon = item.icon
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      cn(
-                        'group flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-all',
-                        isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-accent/80 hover:text-foreground',
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <div className="flex items-center gap-2.5">
-                          <Icon
-                            className={cn(
-                              'h-4 w-4 shrink-0 transition-transform group-hover:scale-105',
-                              isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
-                            )}
-                          />
-                          <span>{item.name}</span>
-                        </div>
-                        {item.adminOnly && !isAdmin && (
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 opacity-70">
-                            admin
-                          </Badge>
-                        )}
-                        {isActive && <ChevronRight className="h-3 w-3 opacity-70" />}
-                      </>
-                    )}
-                  </NavLink>
-                )
-              })}
-            </nav>
-          </div>
-        </div>
+        <div className="my-3 border-t border-border/60" />
 
-        {/* Active Context Card in Sidebar footer */}
-        <div className="pt-4 border-t border-border/60 mt-6 shrink-0">
-          <div className="p-3 rounded-lg bg-muted/50 border border-border/60 text-xs space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase text-muted-foreground">
-                Active Tenant
-              </span>
-              <Badge variant="outline" className="text-[10px] px-1 py-0">
-                {currentRole}
-              </Badge>
-            </div>
-            <p className="font-semibold text-foreground truncate text-xs">
-              {activeTenant.name}
-            </p>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <span>Currency: {activeTenant.currency}</span>
-              <span>•</span>
-              <span>{activeTenant.locale}</span>
-            </div>
+        {!collapsed && (
+          <div className="px-2.5 mb-1.5 text-[11px] font-medium text-muted-foreground">
+            Workspace
           </div>
+        )}
 
-          <div className="mt-3 text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-            <span>Frontend Scaffold v0.1</span>
-          </div>
-        </div>
+        <nav aria-label="Workspace sections" className="space-y-0.5">
+          {WORKSPACE_NAV_ITEMS.map(renderNavItem)}
+        </nav>
       </div>
+
+      {/* Collapse / Expand Rail Control */}
+      {onToggleCollapse && (
+        <div className="shrink-0 border-t border-border/60 p-2">
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={cn(
+              'flex items-center rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring',
+              collapsed ? 'h-9 w-9 mx-auto justify-center' : 'h-9 w-full gap-2.5 px-2.5',
+            )}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4 shrink-0" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4 shrink-0" />
+                <span>Collapse</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </aside>
   )
 }
