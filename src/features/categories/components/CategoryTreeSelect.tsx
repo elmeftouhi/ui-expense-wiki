@@ -263,7 +263,7 @@ export function CategoryTreeSelect({
       {open && (
         <div
           tabIndex={-1}
-          className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[17rem] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg focus:outline-none"
+          className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[17rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg focus:outline-none"
         >
           <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
             <Search aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

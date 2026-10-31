@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
 import { CategoriesPage } from '../pages/CategoriesPage'
 import { CategoryFormModal } from '../components/CategoryFormModal'
+import { CategoryDeleteModal } from '../components/CategoryDeleteModal'
 import { categoryService } from '../services/categoryService'
 import { organizeCategories } from '../utils/categoryOrder'
 import type { Category } from '../types'
@@ -81,7 +82,7 @@ function dropOn(name: string, edge: 'before' | 'after', dataTransfer: ReturnType
   return { row, drop: () => dispatch('drop') }
 }
 
-describe('category ordering', () => {
+describe('category ordering & UI', () => {
   it('starts collapsed and supports individual and bulk expansion for read-only members', async () => {
     tenant.canEdit = false
     render(tree())
@@ -138,8 +139,7 @@ describe('category ordering', () => {
     fireEvent(handle, start)
     const preview = document.querySelector<HTMLElement>('[data-category-drag-preview]')!
     expect(preview).toHaveTextContent('Office')
-    expect(preview).toHaveTextContent('Monthly Budget')
-    expect(preview).toHaveTextContent('Uncapped')
+    expect(preview).toHaveTextContent('2 subcategories')
     expect(preview).toHaveStyle({ width: '800px', height: '80px', pointerEvents: 'none', opacity: '1' })
     const move = createEvent.dragOver(document)
     Object.defineProperties(move, { clientX: { value: 140 }, clientY: { value: 240 } })
@@ -273,13 +273,13 @@ describe('category ordering', () => {
     expect(patch).toHaveBeenCalledWith('/v1/categories/3/level', { level: 1 })
   })
 
-  it('simplifies the heading, removes summary cards, and renders server order', async () => {
+  it('simplifies the heading, removes summary cards and budget noise, and renders server order', async () => {
     render(tree())
     await screen.findByRole('button', { name: 'Move Office down' })
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Categories$/)
     expect(screen.queryByText('Test workspace')).not.toBeInTheDocument()
-    for (const label of ['Total Categories', 'Monthly Allocation', 'Strict Thresholds', 'nested children']) {
+    for (const label of ['Total Categories', 'Monthly Allocation', 'Monthly Budget', 'Uncapped', 'Strict Limit', 'Flexible', 'nested children']) {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
     expect(groups()).toEqual(['Reorder Office', 'Reorder Rent', 'Reorder Internet', 'Reorder Travel', 'Reorder Flights'])
@@ -288,6 +288,11 @@ describe('category ordering', () => {
     expect(screen.getByRole('button', { name: 'Move Rent up' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Move Internet down' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Move Flights down' })).toBeDisabled()
+
+    await userEvent.click(screen.getByTitle('Card Grid View'))
+    for (const label of ['Monthly Budget', 'Uncapped', 'Strict Limit', 'Flexible']) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
+    }
   })
 
   it('moves a parent with one request and retains its children after reload', async () => {
@@ -328,17 +333,83 @@ describe('category ordering', () => {
     expect(categoryService.updateLevel).toHaveBeenCalledExactlyOnceWith(3, 2)
   })
 
-  it('disables reordering with search or status filters', async () => {
+  it('disables reordering with search or status filters and auto-expands matching subcategories', async () => {
     render(tree())
     await screen.findByRole('button', { name: 'Move Office down' })
+    expect(screen.queryByText('Internet')).not.toBeInTheDocument()
+
     const search = screen.getByPlaceholderText('Search categories by name or description...')
-    await userEvent.type(search, 'Office')
+    await userEvent.type(search, 'Internet')
+    expect(screen.getByText('Internet')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Move Office down' })).toBeDisabled()
-    await userEvent.clear(search)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(screen.queryByText('Internet')).not.toBeInTheDocument()
+
     await userEvent.click(screen.getByRole('button', { name: /^Active \(/ }))
     expect(screen.getByRole('button', { name: 'Move Office down' })).toBeDisabled()
     expect(screen.getByText('Clear search and select All to reorder categories.')).toBeInTheDocument()
     expect(categoryService.updateLevel).not.toHaveBeenCalled()
+  })
+
+  it('shows Inactive badges only on inactive categories and keeps active rows quiet', async () => {
+    data = [
+      category(1, 'Office', 1),
+      { ...category(2, 'Legacy', 2), active: false },
+    ]
+    render(tree())
+    await screen.findByText('Office')
+    expect(screen.getByText('Legacy')).toBeInTheDocument()
+    expect(screen.getAllByText('Inactive')).toHaveLength(1)
+  })
+
+  it('uses a bottom-sheet action menu and bottom-sheet modals on mobile viewports', async () => {
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+
+    try {
+      render(tree())
+      await screen.findByText('Office')
+      const menuTrigger = screen.getByRole('button', { name: 'Actions for Office' })
+      await userEvent.click(menuTrigger)
+      expect(screen.getByRole('menuitem', { name: 'Add subcategory' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Deactivate' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
+      expect(screen.getByRole('dialog', { name: 'Edit category' })).toBeInTheDocument()
+      await userEvent.keyboard('{Escape}')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    } finally {
+      window.matchMedia = originalMatchMedia
+    }
+  })
+
+  it('renders delete confirmation dialog with subcategory warning and closes on Escape', async () => {
+    const onClose = vi.fn()
+    render(
+      <CategoryDeleteModal
+        isOpen
+        onClose={onClose}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        category={category(1, 'Office', 1)}
+        hasSubcategories
+      />,
+    )
+    expect(screen.getByRole('dialog', { name: 'Delete category' })).toBeInTheDocument()
+    expect(screen.getByText(/contains subcategories/)).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledOnce()
   })
 
   it('shows failures without pretending the category moved', async () => {

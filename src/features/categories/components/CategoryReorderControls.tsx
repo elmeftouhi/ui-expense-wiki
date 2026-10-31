@@ -18,9 +18,10 @@ export function CategoryReorderControls({ category, siblings, disabled, onMove }
           key={direction}
           type="button"
           aria-label={`Move ${category.name} ${direction}`}
+          title={`Move ${direction}`}
           disabled={disabled || index < 0 || index + offset < 0 || index + offset >= siblings.length}
           onClick={() => onMove(category, index + offset + 1)}
-          className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
+          className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-25"
         >
           <Icon className="h-3.5 w-3.5" />
         </button>

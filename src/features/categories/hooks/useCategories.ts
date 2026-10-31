@@ -6,6 +6,13 @@ import { queryKeys } from '@/api/query-keys'
 
 export const CATEGORIES_QUERY_KEY = 'categories'
 
+function invalidateCategoryCaches(queryClient: ReturnType<typeof useQueryClient>, tenantId: string | number) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: [CATEGORIES_QUERY_KEY, tenantId] }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.tenantScope(tenantId).categories.all }),
+  ])
+}
+
 export function useReorderCategory() {
   const queryClient = useQueryClient()
   const { activeTenant } = useActiveTenant()
@@ -13,10 +20,7 @@ export function useReorderCategory() {
     mutationFn: ({ id, level }: { id: number; level: number }) =>
       categoryService.updateLevel(id, level),
     onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: [CATEGORIES_QUERY_KEY, activeTenant.id] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tenantScope(activeTenant.id).categories.all }),
-      ])
+      await invalidateCategoryCaches(queryClient, activeTenant.id)
     },
   })
 }
@@ -38,9 +42,7 @@ export function useCreateCategory() {
   return useMutation({
     mutationFn: (payload: CategoryCreateRequest) => categoryService.create(payload),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: [CATEGORIES_QUERY_KEY, activeTenant.id],
-      })
+      void invalidateCategoryCaches(queryClient, activeTenant.id)
     },
   })
 }
@@ -53,9 +55,7 @@ export function useUpdateCategory() {
     mutationFn: ({ id, payload }: { id: number; payload: CategoryCreateRequest }) =>
       categoryService.update(id, payload),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: [CATEGORIES_QUERY_KEY, activeTenant.id],
-      })
+      void invalidateCategoryCaches(queryClient, activeTenant.id)
     },
   })
 }
@@ -67,9 +67,7 @@ export function useDeleteCategory() {
   return useMutation({
     mutationFn: (id: number) => categoryService.delete(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: [CATEGORIES_QUERY_KEY, activeTenant.id],
-      })
+      void invalidateCategoryCaches(queryClient, activeTenant.id)
     },
   })
 }
@@ -81,9 +79,7 @@ export function useToggleCategoryStatus() {
   return useMutation({
     mutationFn: (id: number) => categoryService.toggleStatus(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: [CATEGORIES_QUERY_KEY, activeTenant.id],
-      })
+      void invalidateCategoryCaches(queryClient, activeTenant.id)
     },
   })
 }

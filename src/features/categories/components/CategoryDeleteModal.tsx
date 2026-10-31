@@ -1,14 +1,106 @@
 import React, { useState } from 'react'
-import { AlertTriangle, Trash2, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Loader2, Trash2 } from 'lucide-react'
 import type { Category } from '../types'
 import { Button } from '@/components/ui/button'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { CategoryDialog } from './CategoryDialog'
 
-interface CategoryDeleteModalProps {
+export interface CategoryDeleteModalProps {
   isOpen: boolean
   onClose: () => void
   onConfirm: () => Promise<void>
   category: Category | null
   hasSubcategories?: boolean
+}
+
+const CategoryDeleteInner: React.FC<{
+  onClose: () => void
+  onConfirm: () => Promise<void>
+  category: Category
+  hasSubcategories: boolean
+}> = ({ onClose, onConfirm, category, hasSubcategories }) => {
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDelete = async () => {
+    setError(null)
+    setIsDeleting(true)
+    try {
+      await onConfirm()
+      onClose()
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err))
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <CategoryDialog
+      title="Delete category"
+      onClose={onClose}
+      dismissible={!isDeleting}
+      className="sm:max-w-md"
+    >
+      {error && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="space-y-3 text-xs text-muted-foreground">
+        <p className="leading-relaxed">
+          Delete <strong className="font-semibold text-foreground">&ldquo;{category.name}&rdquo;</strong>? This action cannot be undone.
+        </p>
+
+        {hasSubcategories && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5 text-[11px] text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              This category contains subcategories that may also be removed or unlinked.
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-border/60 pt-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onClose}
+          disabled={isDeleting}
+          className="cursor-pointer text-xs"
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onClick={handleDelete}
+          disabled={isDeleting}
+          className="min-w-[96px] cursor-pointer gap-1.5 text-xs"
+        >
+          {isDeleting ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Deleting…</span>
+            </>
+          ) : (
+            <>
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Delete</span>
+            </>
+          )}
+        </Button>
+      </div>
+    </CategoryDialog>
+  )
 }
 
 export const CategoryDeleteModal: React.FC<CategoryDeleteModalProps> = ({
@@ -18,97 +110,14 @@ export const CategoryDeleteModal: React.FC<CategoryDeleteModalProps> = ({
   category,
   hasSubcategories = false,
 }) => {
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
   if (!isOpen || !category) return null
-
-  const handleDelete = async () => {
-    setError(null)
-    setIsDeleting(true)
-    try {
-      await onConfirm()
-      onClose()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete category.'
-      setError(msg)
-    } finally {
-      setIsDeleting(false)
-    }
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in-50">
-      <div className="w-full max-w-md rounded-2xl border border-destructive/30 bg-card p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-destructive/10 text-destructive">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-foreground">Delete Category</h2>
-              <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {error && (
-          <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-            {error}
-          </div>
-        )}
-
-        <div className="text-xs text-muted-foreground space-y-2">
-          <p>
-            Are you sure you want to delete{' '}
-            <strong className="text-foreground font-semibold">"{category.name}"</strong>?
-          </p>
-          {hasSubcategories && (
-            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px]">
-              ⚠️ Warning: This category has associated subcategories. Deleting it may impact
-              or reassign nested expense items.
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border/60">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={isDeleting}
-            className="cursor-pointer"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="cursor-pointer gap-1.5 min-w-[110px]"
-          >
-            {isDeleting ? (
-              <>
-                <span className="w-3.5 h-3.5 rounded-full border-2 border-destructive-foreground border-t-transparent animate-spin" />
-                <span>Deleting...</span>
-              </>
-            ) : (
-              <>
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete</span>
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <CategoryDeleteInner
+      key={category.id}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      category={category}
+      hasSubcategories={hasSubcategories}
+    />
   )
 }

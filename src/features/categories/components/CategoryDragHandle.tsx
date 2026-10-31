@@ -10,9 +10,9 @@ export function CategoryDragHandle({ name, disabled, ...props }: HTMLAttributes<
       {...props}
       type="button"
       aria-label={`Drag to reorder ${name}`}
-      title="Drag above or below a category in the same group"
+      title="Drag to reorder"
       disabled={disabled}
-      className="shrink-0 rounded p-1.5 text-muted-foreground cursor-grab active:cursor-grabbing hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/75 cursor-grab active:cursor-grabbing transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-25"
     >
       <GripVertical className="h-4 w-4" />
     </button>
