@@ -4,16 +4,13 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  Calendar,
-  Clock,
   AlertCircle,
   PiggyBank,
-  Receipt,
-  FileCheck,
   ArrowRight,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react'
 import type { DashboardPeriodTotals, DashboardSummary } from '../types'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
@@ -44,7 +41,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold tabular-nums tracking-tight',
+          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums tracking-tight',
           isUp
             ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
             : isDown
@@ -53,11 +50,11 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
         )}
       >
         {isUp ? (
-          <TrendingUp className="w-3.5 h-3.5" />
+          <TrendingUp className="w-3 h-3" />
         ) : isDown ? (
-          <TrendingDown className="w-3.5 h-3.5" />
+          <TrendingDown className="w-3 h-3" />
         ) : (
-          <Minus className="w-3.5 h-3.5" />
+          <Minus className="w-3 h-3" />
         )}
         <span>{formattedPercent}</span>
       </span>
@@ -73,8 +70,10 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
     return (
       <>
         {renderTrendBadge(period.percentageChange)}
-        <span className="text-muted-foreground">
-          <strong className="text-foreground font-medium">{formattedDiff}</strong> vs {label} ({money(period.previousTotal)})
+        <span className="text-muted-foreground leading-snug">
+          <strong className="text-foreground font-medium font-mono tabular-nums">{formattedDiff}</strong>
+          <span className="sr-only sm:not-sr-only"> vs {label}</span>{' '}
+          <span className="font-mono tabular-nums">({money(period.previousTotal)})</span>
         </span>
       </>
     )
@@ -88,233 +87,230 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
   const budget = summary?.monthlyBudget
   const usedPercentage = budget?.usedPercentage ?? 0
   const overdueCount = overdue?.count ?? 0
+  const pendingCount = pending?.count ?? 0
   const nextExpenseLabel = upcoming?.nextExpenseLabel?.trim() || EMPTY
+
+  const payablesStrip = (position: 'top' | 'bottom') => (
+    <div
+      className={cn(
+        'grid grid-cols-2 divide-x divide-border/60 text-xs',
+        position === 'top' ? 'border-b border-border/60' : 'border-t border-border/60 bg-muted/15',
+      )}
+    >
+      {/* Overdue Action Cell */}
+      <Link
+        to="/expenses/overdue"
+        className={cn(
+          'group flex items-center justify-between gap-2 px-3.5 py-2.5 sm:px-5 transition-colors min-w-0',
+          overdueCount > 0
+            ? 'bg-destructive/[0.06] hover:bg-destructive/[0.11]'
+            : 'hover:bg-accent/40',
+        )}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          {overdueCount > 0 ? (
+            <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          )}
+          <span className="text-muted-foreground hidden sm:inline">Overdue</span>
+          <Badge
+            variant={overdueCount > 0 ? 'destructive' : 'success'}
+            className="text-[10px] px-1.5 py-0 truncate"
+            data-testid="overdue-count"
+          >
+            {!overdue ? EMPTY : overdueCount > 0 ? `${overdueCount} overdue` : 'All settled'}
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <span
+            className={cn(
+              'font-mono tabular-nums font-semibold',
+              overdueCount > 0 ? 'text-destructive' : 'text-muted-foreground',
+            )}
+            data-testid="overdue-total"
+          >
+            {money(overdue?.totalAmount)}
+          </span>
+          {overdueCount > 0 && (
+            <ArrowRight className="w-3 h-3 text-destructive/80 group-hover:translate-x-0.5 transition-transform" />
+          )}
+        </div>
+      </Link>
+
+      {/* Pending Action Cell */}
+      <Link
+        to="/expenses"
+        className="group flex items-center justify-between gap-2 px-3.5 py-2.5 sm:px-5 hover:bg-accent/40 transition-colors min-w-0"
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="text-muted-foreground hidden sm:inline">Pending</span>
+          <Badge
+            variant={pendingCount > 0 ? 'warning' : 'secondary'}
+            className="text-[10px] px-1.5 py-0 truncate"
+            data-testid="pending-count"
+          >
+            {pending ? `${pending.count} pending` : EMPTY}
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <span
+            className="font-mono tabular-nums font-semibold text-foreground"
+            data-testid="pending-total"
+          >
+            {money(pending?.totalAmount)}
+          </span>
+          <ArrowRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block" />
+        </div>
+      </Link>
+    </div>
+  )
 
   return (
     <section
-      className={cn('space-y-4 transition-opacity', isLoading && !summary && 'opacity-60')}
+      className={cn('transition-opacity', isLoading && !summary && 'opacity-60')}
       aria-label="Key Financial Performance Metrics"
       aria-busy={isLoading}
     >
-      {/* Primary KPI Row: This Month, This Year, Upcoming This Month */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* 1. Total Expense This Month */}
-        <Card className="relative overflow-hidden border-border/80 shadow-xs hover:border-border transition-all">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Total Expenses This Month
-              </span>
-              <div className="p-2 rounded-xl bg-primary/10 text-primary">
-                <Receipt className="w-4 h-4" />
-              </div>
-            </div>
+      <div className="rounded-xl border border-border/80 bg-card text-card-foreground shadow-xs overflow-hidden">
+        {/* Urgent Payables Banner promoted to top when overdue items exist */}
+        {overdueCount > 0 && payablesStrip('top')}
 
-            <div className="space-y-2">
+        {/* Hero Band: Month Spend + Integrated Monthly Budget */}
+        <div className="p-4 sm:p-5 md:grid md:grid-cols-12 md:gap-6 md:items-center space-y-3.5 md:space-y-0">
+          {/* Primary Metric: This Month's Spend */}
+          <div className="md:col-span-7 space-y-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              This month&apos;s spend
+            </span>
+
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
               <div
-                className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums"
+                className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums"
                 data-testid="month-current-total"
               >
                 {money(month?.currentTotal)}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs" data-testid="month-comparison">
+              <div
+                className="flex flex-wrap items-center gap-1.5 text-xs"
+                data-testid="month-comparison"
+              >
                 {renderComparison(month, 'last month')}
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* 2. Total Expense This Year */}
-        <Card className="relative overflow-hidden border-border/80 shadow-xs hover:border-border transition-all">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Total Expenses This Year (YTD)
-              </span>
-              <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                <Calendar className="w-4 h-4" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div
-                className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums"
-                data-testid="year-current-total"
-              >
-                {money(year?.currentTotal)}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs" data-testid="year-comparison">
-                {renderComparison(year, 'last year YTD')}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 3. Upcoming Expenses This Month */}
-        <Card className="relative overflow-hidden border-border/80 shadow-xs hover:border-border transition-all">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Upcoming This Month
-              </span>
-              <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                <Clock className="w-4 h-4" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div
-                className="text-3xl font-bold tracking-tight text-foreground font-mono tabular-nums"
-                data-testid="upcoming-total"
-              >
-                {money(upcoming?.totalAmount)}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-muted-foreground">
-                <Badge variant="secondary" className="text-[11px] font-medium">
-                  {upcoming ? `${upcoming.count} scheduled` : EMPTY}
-                </Badge>
-                <span className="truncate" data-testid="upcoming-next">
-                  Next: {upcoming ? nextExpenseLabel : EMPTY}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Secondary Operational Metrics Row: Budget, Pending, Overdue */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* 6. Monthly Budget */}
-        <Card className="border-border/80 shadow-xs group hover:border-border transition-all">
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center justify-between">
+          {/* Integrated Monthly Budget Gauge */}
+          <div className="md:col-span-5 pt-3 md:pt-0 border-t md:border-t-0 md:border-l border-border/60 md:pl-6 space-y-2">
+            <div className="flex items-center justify-between gap-2">
               <Link
                 to="/budgets"
-                className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-                title="View all budgets & consuming state"
+                className="group inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
-                <PiggyBank className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Monthly Budget</span>
-                <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <PiggyBank className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Monthly budget</span>
+                <ArrowRight className="w-3 h-3 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
               </Link>
+
               <Badge
                 variant={usedPercentage > 90 ? 'destructive' : 'outline'}
-                className="text-[11px] font-mono"
+                className="text-[11px] font-mono tabular-nums px-2 py-0"
                 data-testid="budget-used"
               >
                 {budget ? `${usedPercentage.toFixed(0)}% used` : EMPTY}
               </Badge>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex items-baseline justify-between text-xs">
-                <span className="text-muted-foreground text-[11px]">Total budget</span>
-                <span className="font-semibold text-foreground font-mono" data-testid="budget-total">
+            <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-500',
+                  usedPercentage > 90
+                    ? 'bg-destructive'
+                    : usedPercentage > 75
+                    ? 'bg-amber-500'
+                    : 'bg-primary',
+                )}
+                style={{ width: `${Math.max(0, Math.min(100, usedPercentage))}%` }}
+              />
+            </div>
+
+            <div className="flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground">
+              <span>
+                Remaining{' '}
+                <strong
+                  className="font-semibold text-foreground font-mono tabular-nums"
+                  data-testid="budget-remaining"
+                >
+                  {money(budget?.totalRemaining)}
+                </strong>
+              </span>
+              <span>
+                of{' '}
+                <span className="font-mono tabular-nums text-foreground font-medium" data-testid="budget-total">
                   {money(budget?.totalBudget)}
                 </span>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full rounded-full transition-all duration-500',
-                    usedPercentage > 90
-                      ? 'bg-destructive'
-                      : usedPercentage > 75
-                      ? 'bg-amber-500'
-                      : 'bg-primary',
-                  )}
-                  style={{ width: `${Math.max(0, Math.min(100, usedPercentage))}%` }}
-                />
-              </div>
-
-              <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-0.5">
-                <span>
-                  Remaining:{' '}
-                  <strong className="font-semibold text-foreground font-mono" data-testid="budget-remaining">
-                    {money(budget?.totalRemaining)}
-                  </strong>
-                </span>
-                <Link
-                  to="/budgets"
-                  className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
-                >
-                  <span>Budgets</span>
-                  <ArrowRight className="w-2.5 h-2.5" />
-                </Link>
-              </div>
+              </span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* 5. Pending */}
-        <Card className="border-border/80 shadow-xs">
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                <FileCheck className="w-4 h-4 text-primary" />
-                <span>Pending</span>
-              </div>
-              <Badge variant="warning" className="text-[11px]" data-testid="pending-count">
-                {pending ? `${pending.count} pending` : EMPTY}
+        {/* Secondary Compact 2-Column Split: Upcoming & Year-to-Date */}
+        <div className="grid grid-cols-2 divide-x divide-border/60 border-t border-border/60">
+          {/* Upcoming This Month */}
+          <Link
+            to="/expenses"
+            className="p-3.5 sm:px-5 sm:py-4 space-y-1 hover:bg-accent/30 transition-colors min-w-0 block"
+          >
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground truncate">
+                Upcoming
+              </span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium shrink-0">
+                {upcoming ? `${upcoming.count} scheduled` : EMPTY}
               </Badge>
             </div>
 
-            <div className="space-y-1">
-              <div
-                className="text-2xl font-bold tracking-tight text-foreground font-mono tabular-nums"
-                data-testid="pending-total"
-              >
-                {money(pending?.totalAmount)}
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Awaiting payment or confirmation
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 4. Overdue */}
-        <Card className="border-border/80 shadow-xs">
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                <AlertCircle
-                  className={cn(
-                    'w-4 h-4',
-                    overdueCount > 0 ? 'text-destructive' : 'text-emerald-500',
-                  )}
-                />
-                <span>Overdue</span>
-              </div>
-              <Badge
-                variant={overdueCount > 0 ? 'destructive' : 'success'}
-                className="text-[11px]"
-                data-testid="overdue-count"
-              >
-                {!overdue ? EMPTY : overdueCount > 0 ? `${overdueCount} overdue` : 'All settled'}
-              </Badge>
+            <div
+              className="text-lg sm:text-xl font-bold tracking-tight text-foreground font-mono tabular-nums truncate"
+              data-testid="upcoming-total"
+            >
+              {money(upcoming?.totalAmount)}
             </div>
 
-            <div className="space-y-1">
-              <div
-                className="text-2xl font-bold tracking-tight text-foreground font-mono tabular-nums"
-                data-testid="overdue-total"
-              >
-                {money(overdue?.totalAmount)}
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                {overdueCount > 0
-                  ? 'Immediate disbursement required'
-                  : 'Zero outstanding overdue payments'}
-              </p>
+            <p className="text-[11px] text-muted-foreground truncate" data-testid="upcoming-next">
+              Next: {upcoming ? nextExpenseLabel : EMPTY}
+            </p>
+          </Link>
+
+          {/* Year-to-Date (YTD) */}
+          <div className="p-3.5 sm:px-5 sm:py-4 space-y-1 min-w-0">
+            <span className="text-xs font-medium text-muted-foreground block truncate">
+              Year to date
+            </span>
+
+            <div
+              className="text-lg sm:text-xl font-bold tracking-tight text-foreground font-mono tabular-nums truncate"
+              data-testid="year-current-total"
+            >
+              {money(year?.currentTotal)}
             </div>
-          </CardContent>
-        </Card>
+
+            <div
+              className="flex flex-wrap items-center gap-1.5 text-[11px]"
+              data-testid="year-comparison"
+            >
+              {renderComparison(year, 'last year YTD')}
+            </div>
+          </div>
+        </div>
+
+        {/* Quiet Payables Footer Strip when zero overdue items */}
+        {overdueCount === 0 && payablesStrip('bottom')}
       </div>
     </section>
   )
