@@ -466,4 +466,67 @@ describe('expense UI', () => {
     render(<MemoryRouter><ExpenseStatisticsPage /></MemoryRouter>)
     expect(screen.getByText('No category expenses in this date range.')).toBeInTheDocument()
   })
+
+  it('groups mobile cards by date with daily subtotals, supports whole-card tap, and renders mobile bottom sheets + FAB', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+    try {
+      const items = [
+        { ...expense, id: 7, description: 'Electricity bill', amount: 80, dueDate: '2025-02-10', status: 'PAID' as const, paidDate: '2025-02-10' },
+        { ...expense, id: 8, description: 'Coffee beans', amount: 20, dueDate: '2025-02-10', status: 'PAID' as const, paidDate: '2025-02-10' },
+        { ...expense, id: 9, description: 'Train ticket', amount: 45, dueDate: '2025-02-09', status: 'PENDING' as const },
+      ]
+      vi.mocked(useExpenses).mockReturnValue({
+        data: { content: items, page: 0, size: 25, totalPages: 1, totalElements: 3, filteredTotalAmount: 145 },
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+      } as unknown as ReturnType<typeof useExpenses>)
+
+      render(
+        <MemoryRouter initialEntries={['/expenses']}>
+          <Routes>
+            <Route path="/expenses" element={<ExpensesPage />} />
+            <Route path="/expenses/:expenseId" element={<p>Opened detail page</p>} />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      // Daily subtotal header ($80 + $20 = $100.00) and 3 listitems
+      const list = screen.getByRole('list', { name: 'Expense list' })
+      expect(within(list).getAllByRole('listitem')).toHaveLength(3)
+      expect(within(list).getByText('$100.00')).toBeInTheDocument()
+
+      // Floating Action Button in thumb zone on mobile
+      expect(screen.getByRole('link', { name: 'Record expense' })).toHaveAttribute('href', '/expenses/new')
+
+      // Mobile Filters opens as a modal bottom sheet
+      await user.click(screen.getByRole('button', { name: /More filters/ }))
+      const filterDialog = screen.getByRole('dialog', { name: 'Filter expenses' })
+      expect(filterDialog).toBeInTheDocument()
+      await user.click(within(filterDialog).getByRole('button', { name: /Show 3 expenses/ }))
+      expect(screen.queryByRole('dialog', { name: 'Filter expenses' })).not.toBeInTheDocument()
+
+      // Mobile Row Action Sheet stays open on window scroll
+      await user.click(screen.getByRole('button', { name: 'More actions for Train ticket' }))
+      expect(screen.getByRole('menu', { name: 'More actions for Train ticket' })).toBeInTheDocument()
+      window.dispatchEvent(new Event('scroll'))
+      expect(screen.getByRole('menu', { name: 'More actions for Train ticket' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+
+      // Tapping anywhere on the mobile card body opens the expense details page
+      const firstCard = within(list).getAllByRole('listitem')[0]
+      await user.click(firstCard)
+      expect(await screen.findByText('Opened detail page')).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })

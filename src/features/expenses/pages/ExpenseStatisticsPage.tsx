@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, ChartNoAxesCombined, ChevronDown, ChevronRight, Folder, FolderOpen, Tag } from 'lucide-react'
+import { ChartNoAxesCombined, ChevronDown, ChevronRight, Folder, FolderOpen, Tag } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useActiveTenant } from '@/features/tenants'
 import { formatCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useMediaQuery } from '@/lib/useMediaQuery'
+import { ExpenseViewsNav } from '../components/ExpenseViewsNav'
 import { useExpenseStatistics } from '../hooks/useExpenses'
 import type { ExpenseCategoryStatistic, ExpenseStatisticsFilters } from '../types'
 import { currentMonthStatisticsRange } from '../utils/statisticsRange'
@@ -52,7 +53,7 @@ function CategoryRow({ category, amount, color, depth = 0 }: {
             </button>
           ) : <div className="flex items-center gap-2 pl-6">{label}</div>}
         </td>
-        <td className="whitespace-nowrap py-3 pr-4 text-right tabular-nums">{amount(category.total)}</td>
+        <td className="whitespace-nowrap py-3 pr-4 text-right font-mono tabular-nums">{amount(category.total)}</td>
       </tr>
       {expanded && category.subCategories.map((child) => (
         <CategoryRow key={child.categoryId} category={child} amount={amount} color={color} depth={depth + 1} />
@@ -65,6 +66,7 @@ export function ExpenseStatisticsPage() {
   const { activeTenant } = useActiveTenant()
   const [range, setRange] = useState<ExpenseStatisticsFilters>(currentMonthStatisticsRange)
   const stats = useExpenseStatistics(range)
+  const isWideHeader = useMediaQuery('(min-width: 1024px)', true)
   const invalidRange = Boolean(range.startDate && range.endDate && range.startDate > range.endDate)
 
   const amount = (value: number) => formatCurrency(value, { currency: activeTenant.currency, locale: activeTenant.locale })
@@ -76,18 +78,18 @@ export function ExpenseStatisticsPage() {
   ]
 
   return (
-    <div className="space-y-6">
-      <Link to="/expenses" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />All expenses</Link>
-      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Expense statistics</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Compare paid, pending, and overdue totals for a date range.</p>
+    <div className="space-y-4">
+      <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">Expense statistics</h1>
+          {isWideHeader && <ExpenseViewsNav active="statistics" />}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="space-y-1 text-xs font-medium text-muted-foreground" htmlFor="statistics-start-date">From<Input id="statistics-start-date" type="date" value={range.startDate} max={range.endDate || undefined} onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))} /></label>
-          <label className="space-y-1 text-xs font-medium text-muted-foreground" htmlFor="statistics-end-date">To<Input id="statistics-end-date" type="date" value={range.endDate} min={range.startDate || undefined} onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))} /></label>
+        <div className="grid grid-cols-2 gap-2.5 sm:w-auto">
+          <label className="space-y-1 text-xs font-medium text-muted-foreground" htmlFor="statistics-start-date">From<Input id="statistics-start-date" type="date" className="h-9 text-xs sm:text-sm" value={range.startDate} max={range.endDate || undefined} onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))} /></label>
+          <label className="space-y-1 text-xs font-medium text-muted-foreground" htmlFor="statistics-end-date">To<Input id="statistics-end-date" type="date" className="h-9 text-xs sm:text-sm" value={range.endDate} min={range.startDate || undefined} onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))} /></label>
         </div>
       </header>
+      {!isWideHeader && <ExpenseViewsNav active="statistics" />}
       {invalidRange && <p role="alert" className="text-sm text-destructive">Start date must be on or before end date.</p>}
       {stats.isLoading ? (
         <Card><CardContent className="p-8 text-sm text-muted-foreground">Loading statistics…</CardContent></Card>
@@ -95,16 +97,16 @@ export function ExpenseStatisticsPage() {
         <Card><CardContent className="space-y-3 p-8 text-center"><ChartNoAxesCombined className="mx-auto h-8 w-8 text-muted-foreground" /><p role="alert" className="text-sm text-destructive">{getApiErrorMessage(stats.error, 'Statistics could not be loaded.')}</p><button type="button" className="text-sm underline" onClick={() => void stats.refetch()}>Try again</button></CardContent></Card>
       ) : stats.data ? (
         <>
-          <section aria-label="Expense totals" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {tiles.map((tile) => <Card key={tile.label}><CardContent className="p-5"><p className="text-sm text-muted-foreground">{tile.label}</p><p className="mt-2 text-2xl font-semibold tabular-nums">{amount(tile.value ?? 0)}</p></CardContent></Card>)}
+          <section aria-label="Expense totals" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {tiles.map((tile) => <Card key={tile.label}><CardContent className="p-4 sm:p-5"><p className="text-xs sm:text-sm text-muted-foreground">{tile.label}</p><p className="mt-1.5 text-lg sm:text-2xl font-bold font-mono tabular-nums">{amount(tile.value ?? 0)}</p></CardContent></Card>)}
           </section>
-          <section className="grid gap-4 sm:grid-cols-2">
-            <Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Overdue expenses</p><p className="mt-2 text-2xl font-semibold tabular-nums">{stats.data.overdueCount}</p></CardContent></Card>
-            <Card><CardContent className="p-5"><p className="text-sm text-muted-foreground">Pending expenses</p><p className="mt-2 text-2xl font-semibold tabular-nums">{stats.data.pendingCount}</p></CardContent></Card>
+          <section className="grid grid-cols-2 gap-3 sm:gap-4">
+            <Card><CardContent className="p-4 sm:p-5"><p className="text-xs sm:text-sm text-muted-foreground">Overdue expenses</p><p className="mt-1.5 text-lg sm:text-2xl font-bold font-mono tabular-nums">{stats.data.overdueCount}</p></CardContent></Card>
+            <Card><CardContent className="p-4 sm:p-5"><p className="text-xs sm:text-sm text-muted-foreground">Pending expenses</p><p className="mt-1.5 text-lg sm:text-2xl font-bold font-mono tabular-nums">{stats.data.pendingCount}</p></CardContent></Card>
           </section>
           <Card>
-            <CardContent className="p-5">
-              <div className="mb-4"><h2 className="text-lg font-semibold">By category</h2><p className="mt-1 text-sm text-muted-foreground">Expand a category to see its subcategories.</p></div>
+            <CardContent className="p-4 sm:p-5">
+              <div className="mb-4"><h2 className="text-base sm:text-lg font-semibold">By category</h2><p className="mt-1 text-xs sm:text-sm text-muted-foreground">Expand a category to see its subcategories.</p></div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-border text-xs text-muted-foreground"><tr><th className="py-3 pr-4 font-medium">Category</th><th className="py-3 pr-4 text-right font-medium">Expenses</th></tr></thead>

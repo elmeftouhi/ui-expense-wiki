@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -44,6 +44,10 @@ function ExpenseFormContent() {
   const isEditing = expenseId !== undefined
   const { canEdit, activeTenant } = useActiveTenant()
   const navigate = useNavigate()
+  const location = useLocation()
+  const fromSearch = (location.state as { fromExpensesSearch?: string } | null)?.fromExpensesSearch
+  const listBackPath = fromSearch ? `/expenses${fromSearch}` : '/expenses'
+  const backTarget = isEditing && expenseId ? `/expenses/${expenseId}` : listBackPath
   const toast = useToast()
   const categories = useCategoryOptions()
   const paymentMethods = usePaymentMethods()
@@ -89,7 +93,7 @@ function ExpenseFormContent() {
       if (isEditing && expenseId) {
         const updated = await updateExpense.mutateAsync({ id: expenseId, payload })
         toast.success('Expense updated.')
-        navigate(`/expenses/${updated.id}`)
+        navigate(`/expenses/${updated.id}`, { state: location.state })
       } else {
         const created = await createExpense.mutateAsync(payload)
         toast.success('Expense recorded.')
@@ -97,7 +101,7 @@ function ExpenseFormContent() {
           reset({ ...createDefaults(), paymentMethodId: paymentMethods.data?.find((method) => method.active && method.isDefault)?.id })
           setTimeout(() => form.setFocus('categoryId'), 0)
         } else {
-          navigate(`/expenses/${created.id}`)
+          navigate(`/expenses/${created.id}`, { state: location.state })
         }
       }
     } catch (error) {
@@ -106,11 +110,11 @@ function ExpenseFormContent() {
   }
 
   if (!canEdit) {
-    return <Card><CardContent className="space-y-3 p-8"><h1 className="text-xl font-semibold">Expense changes are restricted</h1><p className="text-sm text-muted-foreground">Your role does not allow creating or editing expenses.</p><Button asChild variant="outline"><Link to="/expenses">Back to expenses</Link></Button></CardContent></Card>
+    return <Card><CardContent className="space-y-3 p-8"><h1 className="text-xl font-semibold">Expense changes are restricted</h1><p className="text-sm text-muted-foreground">Your role does not allow creating or editing expenses.</p><Button asChild variant="outline"><Link to={listBackPath}>Back to expenses</Link></Button></CardContent></Card>
   }
   if (isEditing && detail.isLoading) return <Card><CardContent className="p-8 text-sm text-muted-foreground">Loading expense…</CardContent></Card>
   if (isEditing && (detail.error || !detail.data)) {
-    return <Card><CardContent className="space-y-3 p-8"><p role="alert" className="text-sm text-destructive">{getApiErrorMessage(detail.error, 'Expense could not be loaded.')}</p><Button asChild variant="outline"><Link to="/expenses">Back to expenses</Link></Button></CardContent></Card>
+    return <Card><CardContent className="space-y-3 p-8"><p role="alert" className="text-sm text-destructive">{getApiErrorMessage(detail.error, 'Expense could not be loaded.')}</p><Button asChild variant="outline"><Link to={listBackPath}>Back to expenses</Link></Button></CardContent></Card>
   }
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = form
@@ -119,10 +123,10 @@ function ExpenseFormContent() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <Link to={isEditing && expenseId ? `/expenses/${expenseId}` : '/expenses'} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />{isEditing ? 'Back to expense' : 'Back to expenses'}</Link>
+      <Link to={backTarget} state={isEditing ? location.state : undefined} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />{isEditing ? 'Back to expense' : 'Back to expenses'}</Link>
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight">{isEditing ? 'Edit expense' : 'Record an expense'}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Choose a category, enter the amount, and save. Add a description only if you need one.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{isEditing ? 'Edit expense' : 'Record an expense'}</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">Choose a category, enter the amount, and save. Add a description only if you need one.</p>
       </header>
       <Card>
         <CardContent className="p-5 sm:p-7">
@@ -200,7 +204,7 @@ function ExpenseFormContent() {
               {errors.notes && <span role="alert" className="block text-xs text-destructive">{errors.notes.message}</span>}
             </label>
             <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-              <Button asChild type="button" variant="outline"><Link to={isEditing && expenseId ? `/expenses/${expenseId}` : '/expenses'}>Cancel</Link></Button>
+              <Button asChild type="button" variant="outline"><Link to={backTarget} state={isEditing ? location.state : undefined}>Cancel</Link></Button>
               {!isEditing && <Button type="button" variant="outline" disabled={saveDisabled} onClick={handleSubmit((values) => submit(values, true))}>Save and add new</Button>}
               <Button type="submit" disabled={saveDisabled} className="gap-2"><Save className="h-4 w-4" />{isEditing ? 'Save changes' : 'Record expense'}</Button>
             </div>

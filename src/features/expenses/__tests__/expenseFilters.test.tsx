@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -53,10 +53,10 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderPage() {
+function renderPage(initialEntry = '/expenses') {
   return render(
     <QueryClientProvider client={client}>
-      <ToastProvider><MemoryRouter><ExpensesPage /></MemoryRouter></ToastProvider>
+      <ToastProvider><MemoryRouter initialEntries={[initialEntry]}><ExpensesPage /></MemoryRouter></ToastProvider>
     </QueryClientProvider>,
   )
 }
@@ -81,7 +81,7 @@ describe('expense filter requests', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'NORMAL')
     await screen.findByText('2 expenses')
     await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PAID')
-    await screen.findByText('1 expenses')
+    await screen.findByText('1 expense')
     expect(screen.getByRole('link', { name: 'Paid expense' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Pending expense' })).not.toBeInTheDocument()
     expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
@@ -111,7 +111,7 @@ describe('expense filter requests', () => {
     vi.mocked(apiClient.get).mockResolvedValue({ ...result, totalPages: 1, totalElements: 1, content: [expense] })
     await user.click(screen.getByRole('button', { name: /More filters/ }))
     await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PENDING')
-    await screen.findByText('1 expenses')
+    await screen.findByText('1 expense')
     expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
   })
 
@@ -179,8 +179,12 @@ describe('expense filter requests', () => {
     expect(screen.getByRole('searchbox', { name: 'Search expenses' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Category' })).toBeVisible()
     expect(screen.queryByRole('combobox', { name: 'Year' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /More filters/ })).toHaveAttribute('aria-expanded', 'false')
-    await user.click(screen.getByRole('button', { name: /More filters/ }))
+    const moreBtn = screen.getByRole('button', { name: /More filters/ })
+    expect(moreBtn).toHaveAttribute('aria-expanded', 'false')
+    // No phantom active filter badge on initial default period
+    expect(moreBtn).not.toHaveTextContent(/active filters/)
+
+    await user.click(moreBtn)
     await user.selectOptions(screen.getByRole('combobox', { name: 'Payment status' }), 'PAID')
     await screen.findByText('100 expenses')
     const requests = vi.mocked(apiClient.get).mock.calls.length
@@ -276,5 +280,58 @@ describe('expense filter requests', () => {
     await user.clear(screen.getByRole('searchbox', { name: 'Search expenses' }))
     await waitFor(() => expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).not.toHaveProperty('search'))
     expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).toHaveProperty('categoryIds', '12')
+  })
+
+  it('hydrates from URL query params, navigates months inline, and filters via quick status pills and row categories', async () => {
+    const user = userEvent.setup()
+    vi.mocked(apiClient.get).mockResolvedValue({
+      ...result,
+      content: [{ ...expense, id: 21, categoryId: 12, categoryName: 'Travel' }],
+      totalElements: 1,
+      totalPages: 1,
+    })
+
+    renderPage('/expenses?status=PENDING&search=flight')
+    await screen.findByText('1 expense')
+    expect(screen.getByRole('searchbox', { name: 'Search expenses' })).toHaveValue('flight')
+    expect(apiClient.get).toHaveBeenCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ status: 'PENDING', search: 'flight', page: 0 }),
+    })
+
+    // Quick status pills update status in 1 tap
+    const quickStatus = screen.getByRole('group', { name: 'Quick status filter' })
+    await user.click(within(quickStatus).getByRole('button', { name: 'Paid' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ status: 'PAID', search: 'flight', page: 0 }),
+    }))
+
+    // Clicking the category name inside a table row filters to that category instead of leaving the page
+    const table = await screen.findByRole('table')
+    await user.click(within(table).getByRole('button', { name: 'Travel' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ categoryIds: '12', page: 0 }),
+    }))
+
+    // Inline month switcher steps backward and toggles All dates
+    await user.click(screen.getByRole('button', { name: 'Previous month' }))
+    const now = new Date()
+    const expectedPrevMonth = now.getMonth() === 0 ? 12 : now.getMonth()
+    const expectedPrevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: expect.objectContaining({ year: expectedPrevYear, month: expectedPrevMonth, page: 0 }),
+    }))
+
+    await user.click(screen.getByRole('button', { name: 'All dates' }))
+    await waitFor(() => {
+      const lastParams = vi.mocked(apiClient.get).mock.lastCall?.[1]?.params
+      expect(lastParams).not.toHaveProperty('year')
+      expect(lastParams).not.toHaveProperty('month')
+    })
+
+    // Clear all filters restores defaults
+    await user.click(screen.getByRole('button', { name: 'Clear all filters' }))
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
+      params: { year: now.getFullYear(), month: now.getMonth() + 1, page: 0, size: 25, sort: 'dueDate,desc' },
+    }))
   })
 })

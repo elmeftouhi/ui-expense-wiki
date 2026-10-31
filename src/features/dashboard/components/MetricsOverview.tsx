@@ -141,7 +141,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
 
       {/* Pending Action Cell */}
       <Link
-        to="/expenses"
+        to="/expenses?status=PENDING"
         className="group flex items-center justify-between gap-2 px-3.5 py-2.5 sm:px-5 hover:bg-accent/40 transition-colors min-w-0"
       >
         <div className="flex items-center gap-1.5 min-w-0">
@@ -263,7 +263,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
         <div className="grid grid-cols-2 divide-x divide-border/60 border-t border-border/60">
           {/* Upcoming This Month */}
           <Link
-            to="/expenses"
+            to="/expenses?status=PENDING"
             className="p-3.5 sm:px-5 sm:py-4 space-y-1 hover:bg-accent/30 transition-colors min-w-0 block"
           >
             <div className="flex items-center justify-between gap-1.5">

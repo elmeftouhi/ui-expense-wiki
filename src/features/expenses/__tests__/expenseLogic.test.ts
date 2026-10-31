@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { expenseFormSchema, toExpensePayload, expenseStatusChangeSchema, toExpenseStatusPayload } from '../schemas/expenseSchema'
 import { expenseResponseSchema, expensePageResponseSchema } from '../schemas/expenseResponseSchema'
+import {
+  buildExpenseUrlSearchParams,
+  countActiveOptionalFilters,
+  defaultExpenseFilters,
+  parseExpenseSearchParams,
+  shiftYearMonth,
+} from '../utils/expenseListParams'
+import { getExpenseDateCue, groupExpensesByDate } from '../utils/dateGroups'
 import { expense } from './expenseFixtures'
 
 const validForm = {
@@ -76,4 +84,52 @@ describe('expense response contracts', () => {
     'rejects invalid expense API data: %o',
     (invalid) => expect(expenseResponseSchema.safeParse({ ...expense, ...invalid }).success).toBe(false),
   )
+})
+
+describe('expense list URL state and date grouping helpers', () => {
+  it('omits defaults in URL params, round-trips custom filters, and avoids phantom badge counts', () => {
+    const refNow = new Date(2026, 9, 31)
+    const defaults = defaultExpenseFilters(refNow)
+    expect(countActiveOptionalFilters(defaults, refNow)).toBe(0)
+    expect(buildExpenseUrlSearchParams(defaults, refNow).toString()).toBe('')
+
+    const custom = {
+      ...defaults,
+      year: undefined,
+      month: undefined,
+      status: 'PENDING' as const,
+      categoryIds: [3, 12],
+      search: 'internet',
+      page: 2,
+      sort: 'amount' as const,
+      direction: 'asc' as const,
+    }
+    const serialized = buildExpenseUrlSearchParams(custom, refNow)
+    expect(parseExpenseSearchParams(serialized, refNow)).toEqual(custom)
+    expect(shiftYearMonth(2026, 1, -1)).toEqual({ year: 2025, month: 12 })
+    expect(shiftYearMonth(2025, 12, 1)).toEqual({ year: 2026, month: 1 })
+  })
+
+  it('groups expenses by date, nulls mixed-currency subtotals, and computes relative urgency cues', () => {
+    const groups = groupExpensesByDate(
+      [
+        { ...expense, id: 1, amount: 40, currency: 'USD', dueDate: '2026-10-31' },
+        { ...expense, id: 2, amount: 15.5, currency: 'USD', dueDate: '2026-10-31' },
+        { ...expense, id: 3, amount: 25, currency: 'EUR', dueDate: '2026-10-30' },
+        { ...expense, id: 4, amount: 10, currency: 'USD', dueDate: '2026-10-30' },
+      ],
+      { sort: 'dueDate', locale: 'en-US', tenantCurrency: 'USD', todayIso: '2026-10-31' },
+    )
+    expect(groups).toHaveLength(2)
+    expect(groups[0]).toMatchObject({ dateKey: '2026-10-31', subtotal: 55.5 })
+    expect(groups[0].label).toContain('Today')
+    expect(groups[1].subtotal).toBeNull()
+
+    expect(
+      getExpenseDateCue({ ...expense, status: 'PENDING', dueDate: '2026-10-28' }, 'en-US', '2026-10-31'),
+    ).toMatchObject({ relativeCue: '3d overdue', tone: 'urgent' })
+    expect(
+      getExpenseDateCue({ ...expense, status: 'PENDING', dueDate: '2026-11-02' }, 'en-US', '2026-10-31'),
+    ).toMatchObject({ relativeCue: 'Due in 2d', tone: 'soon' })
+  })
 })

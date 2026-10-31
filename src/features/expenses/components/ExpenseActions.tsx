@@ -18,12 +18,20 @@ import type { ExpenseResponse, ExpenseStatus } from '../types'
 
 const STATUSES: ExpenseStatus[] = ['PENDING', 'PAID', 'OVERDUE', 'CANCELLED']
 
-export function ExpenseActions({ expense, canEdit, onDeleted, variant = 'full' }: {
+export function ExpenseActions({
+  expense,
+  canEdit,
+  onDeleted,
+  variant = 'full',
+  fromSearch,
+}: {
   expense: ExpenseResponse
   canEdit: boolean
   onDeleted?: () => void
   /** `compact` renders a quick "mark as paid" icon plus an overflow menu, for list rows. */
   variant?: 'full' | 'compact'
+  /** Optional URL query string from the expenses list so Back navigation restores filters. */
+  fromSearch?: string
 }) {
   const { activeTenant } = useActiveTenant()
   const navigate = useNavigate()
@@ -37,6 +45,8 @@ export function ExpenseActions({ expense, canEdit, onDeleted, variant = 'full' }
   const markPaid = useMarkExpenseAsPaid()
   const changeStatus = useChangeExpenseStatus()
   const deleteExpense = useDeleteExpense()
+  const linkState = fromSearch ? { fromExpensesSearch: fromSearch } : undefined
+
   const {
     register,
     handleSubmit,
@@ -90,7 +100,7 @@ export function ExpenseActions({ expense, canEdit, onDeleted, variant = 'full' }
       toast.success('Expense deleted.')
       closeDialog()
       if (onDeleted) onDeleted()
-      else navigate('/expenses')
+      else navigate(fromSearch ? `/expenses${fromSearch}` : '/expenses')
     } catch (error) {
       setServerError(getApiErrorMessage(error, 'Could not delete this expense.'))
     }
@@ -102,23 +112,30 @@ export function ExpenseActions({ expense, canEdit, onDeleted, variant = 'full' }
   }
 
   const compactActions = canEdit && (
-    <div className="flex items-center justify-end gap-0.5">
+    <div
+      className="flex items-center justify-end gap-1 md:gap-0.5"
+      onClick={(event) => event.stopPropagation()}
+    >
       {expense.status !== 'PAID' && (
         <button
           type="button"
           aria-label={`Mark ${expense.description} as paid`}
           title="Mark as paid"
-          onClick={() => setDialog('paid')}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(event) => {
+            event.stopPropagation()
+            setDialog('paid')
+          }}
+          className="inline-flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg md:rounded-md text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <CircleCheck className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       <ExpenseRowMenu
         label={`More actions for ${expense.description}`}
+        title={expense.description}
         items={[
-          { key: 'view', label: 'View details', icon: <Eye className="h-4 w-4" aria-hidden="true" />, to: `/expenses/${expense.id}` },
-          { key: 'edit', label: 'Edit', icon: <Pencil className="h-4 w-4" aria-hidden="true" />, to: `/expenses/${expense.id}/edit` },
+          { key: 'view', label: 'View details', icon: <Eye className="h-4 w-4" aria-hidden="true" />, to: `/expenses/${expense.id}`, state: linkState },
+          { key: 'edit', label: 'Edit', icon: <Pencil className="h-4 w-4" aria-hidden="true" />, to: `/expenses/${expense.id}/edit`, state: linkState },
           { key: 'status', label: 'Change status', icon: <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />, onSelect: openStatusDialog },
           { key: 'delete', label: 'Delete', icon: <Trash2 className="h-4 w-4" aria-hidden="true" />, onSelect: () => setDialog('delete'), destructive: true },
         ]}
@@ -130,10 +147,10 @@ export function ExpenseActions({ expense, canEdit, onDeleted, variant = 'full' }
     <>
       {variant === 'compact' ? compactActions : (
       <div className="flex flex-wrap items-center gap-2">
-        <Button asChild size="sm" variant="outline"><Link to={`/expenses/${expense.id}`}>View</Link></Button>
+        <Button asChild size="sm" variant="outline"><Link to={`/expenses/${expense.id}`} state={linkState}>View</Link></Button>
         {canEdit && (
           <>
-            <Button asChild size="sm" variant="outline"><Link to={`/expenses/${expense.id}/edit`}>Edit</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link to={`/expenses/${expense.id}/edit`} state={linkState}>Edit</Link></Button>
             {expense.status !== 'PAID' && <Button size="sm" onClick={() => setDialog('paid')}>Mark as paid</Button>}
             <Button size="sm" variant="outline" onClick={openStatusDialog}>Change status</Button>
             <Button size="sm" variant="destructive" onClick={() => setDialog('delete')}>Delete</Button>

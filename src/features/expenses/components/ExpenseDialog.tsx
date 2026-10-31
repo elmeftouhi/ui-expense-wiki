@@ -56,7 +56,8 @@ export function ExpenseDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-xs sm:items-center sm:bg-background/80 sm:p-4 sm:backdrop-blur-sm"
+      onClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -69,14 +70,23 @@ export function ExpenseDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-border bg-background p-5 shadow-xl"
+        className="dialog-enter max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card p-5 pb-6 text-card-foreground shadow-2xl sm:max-w-md sm:rounded-xl sm:p-5 sm:shadow-xl"
       >
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/25 sm:hidden"
+        />
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
             <p id={descriptionId} className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
-          <button type="button" aria-label="Close dialog" className="rounded-md p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onClose}>
+          <button
+            type="button"
+            aria-label="Close dialog"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onClose}
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
