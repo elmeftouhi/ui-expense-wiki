@@ -1,6 +1,7 @@
 import React from 'react'
-import { PieChart, ArrowRight } from 'lucide-react'
+import { PieChart as PieChartIcon, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import type { ExpenseStatisticsResponse } from '@/features/expenses'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,7 +48,7 @@ export const CategoryBreakdownCard: React.FC<CategoryBreakdownCardProps> = ({
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <PieChart className="w-4 h-4 text-primary" />
+              <PieChartIcon className="w-4 h-4 text-primary" />
               <span>Spending by Category</span>
             </CardTitle>
             <span className="text-xs text-muted-foreground font-medium">This Month</span>
@@ -74,40 +75,76 @@ export const CategoryBreakdownCard: React.FC<CategoryBreakdownCardProps> = ({
           {!isLoading && !error && categories.length === 0 && (
             <p className="text-sm text-muted-foreground">No category expenses this month.</p>
           )}
-          {categories.map((cat) => (
-            <div key={cat.categoryId} className="space-y-1.5 text-xs">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: cat.color }}
-                  />
-                  <span className="font-medium text-foreground truncate">
-                    {cat.categoryName}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-mono text-muted-foreground text-[11px]">
-                    {cat.percentage.toFixed(1)}%
-                  </span>
-                  <span className="font-semibold font-mono text-foreground">
-                    {formatCurrency(cat.amount, { currency, locale })}
+          {categories.length > 0 && (
+            <>
+              <div className="relative h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categories}
+                      dataKey="amount"
+                      nameKey="categoryName"
+                      innerRadius="58%"
+                      outerRadius="90%"
+                      paddingAngle={categories.length > 1 ? 2 : 0}
+                      stroke="none"
+                      isAnimationActive={false}
+                    >
+                      {categories.map((cat) => (
+                        <Cell key={cat.categoryId} fill={cat.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        const cat = payload[0].payload as (typeof categories)[number]
+                        return (
+                          <div className="rounded-xl border border-border/80 bg-card text-card-foreground p-2.5 shadow-xl text-xs space-y-1 min-w-[150px]">
+                            <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                              <span>{cat.categoryName}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-mono font-bold">{formatCurrency(cat.amount, { currency, locale })}</span>
+                              <span className="font-mono text-muted-foreground">{cat.percentage.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        )
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[11px] text-muted-foreground">Total</span>
+                  <span className="text-sm font-semibold font-mono text-foreground">
+                    {formatCurrency(statistics?.totalExpenses ?? 0, { currency, locale })}
                   </span>
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(100, cat.percentage)}%`,
-                    backgroundColor: cat.color,
-                  }}
-                />
-              </div>
-            </div>
-          ))}
+              <ul className="space-y-1.5 text-xs" aria-label="Category spending">
+                {categories.map((cat) => (
+                  <li key={cat.categoryId} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: cat.color }}
+                      />
+                      <span className="font-medium text-foreground truncate">{cat.categoryName}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-muted-foreground text-[11px]">
+                        {cat.percentage.toFixed(1)}%
+                      </span>
+                      <span className="font-semibold font-mono text-foreground">
+                        {formatCurrency(cat.amount, { currency, locale })}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </CardContent>
       </div>
 

@@ -8,9 +8,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { cn } from '@/lib/utils'
 import { MetricsOverview } from '../components/MetricsOverview'
 import { SpendingTrendChart } from '../components/SpendingTrendChart'
-import { UpcomingExpensesCard } from '../components/UpcomingExpensesCard'
 import { CategoryBreakdownCard } from '../components/CategoryBreakdownCard'
-import { getDashboardDataForTenant } from '../data/mockDashboardData'
 import { useDashboardSummary } from '../hooks/useDashboardSummary'
 import { BudgetConsumptionWidget } from '@/features/budgets'
 import { useExpenseStatistics } from '@/features/expenses'
@@ -26,9 +24,6 @@ export const DashboardPage: React.FC = () => {
     summary.refresh()
     void statistics.refetch({ cancelRefetch: false })
   }
-
-  // The upcoming expense list still uses demo data.
-  const dashboardData = getDashboardDataForTenant(activeTenant.id)
 
   return (
     <div className="space-y-6">
@@ -112,16 +107,10 @@ export const DashboardPage: React.FC = () => {
 
       {/* SECTION 2 & 3: Main Ledger Flow, Budget State & Category Allocation */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left Column (2 cols): Expenditure Trends & Scheduled Liabilities */}
+        {/* Left Column (2 cols): Expenditure Trends */}
         <div className="lg:col-span-2 space-y-6">
           <SpendingTrendChart
             tenantId={activeTenant.id}
-            currency={activeTenant.currency}
-            locale={activeTenant.locale}
-          />
-
-          <UpcomingExpensesCard
-            items={dashboardData.upcomingList}
             currency={activeTenant.currency}
             locale={activeTenant.locale}
           />
