@@ -121,6 +121,7 @@ ui-expense-wiki/
 │   │   ├── budgets/        # Live budgets, category selection, period history & adjustments
 │   │   ├── categories/     # Category classification & department budget tracking
 │   │   ├── dashboard/      # Analytics, KPI metrics, and reporting models
+│   │   ├── data-transfer/  # Workspace JSON backup export & isolated workspace import
 │   │   ├── expenses/       # Ledger, filters, expense lifecycle types & states
 │   │   ├── receipts/       # OCR ingestion, document queue & upload models
 │   │   ├── settings/       # Live tenant configuration, regional formats & reminders
@@ -555,6 +556,29 @@ The top navigation and selected workspace dropdown row share these configured
 values. Other workspace rows show names only because their configuration has
 not been loaded. Other preferences remain stored backend settings; this screen
 does not translate the interface or apply custom date patterns.
+
+## Data transfer (Backup & restore)
+
+**Settings → Data Transfer** (`/settings?section=data-transfer` or `/settings/data-transfer`)
+provides full workspace backup export and non-destructive workspace restoration:
+
+- **Export workspace backup**: Administrators of the active workspace can download
+  a snapshot via `GET /v1/data-transfer/export` saved as
+  `expense-backup-{tenantName}-{yyyyMMdd-HHmmss}.json`.
+- **Import workspace backup**: Creates a **new** isolated workspace from an
+  uploaded `.json` file or pasted JSON via `POST /v1/data-transfer/import`
+  without overwriting any existing workspace data.
+  - Validates `tenantName` and JSON syntax before opening a confirmation dialog
+    summarizing the target workspace name and `switchDefaultTenant` preference.
+  - Displays a non-blocking compatibility warning if `metadata.formatVersion` is
+    missing or differs from `"1.0"`.
+  - Reads uploaded JSON files asynchronously without copying multi-megabyte
+    snapshots into controlled textarea DOM nodes.
+  - After import, displays the new workspace name/ID, a table of imported record
+    counts across all ten entity collections (`exercices`, `categories`,
+    `paymentMethods`, `budgets`, `budgetPeriodInstances`, `subscriptions`,
+    `expenses`, `subscriptionPayments`, `notifications`, `activityLogs`), and a
+    **Switch to imported workspace** action when `switchedDefaultTenant` is `false`.
 
 ---
 

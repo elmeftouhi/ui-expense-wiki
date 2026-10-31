@@ -128,25 +128,29 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({
    */
   const switchTenant = useCallback(
     async (newTenantId: number | string) => {
+      if (String(newTenantId) === String(activeTenant.id)) return
       const target = availableTenants.find((t) => String(t.id) === String(newTenantId))
-      if (!target || String(target.id) === String(activeTenant.id)) return
+      const resolvedId = target ? target.id : newTenantId
+      const numericId =
+        typeof resolvedId === 'number' ? resolvedId : parseInt(String(resolvedId), 10)
+
+      if (!target && (!isAuthenticated || isNaN(numericId))) return
 
       setIsSwitching(true)
 
       try {
         // If numeric tenant ID, call backend to re-issue JWT token with new tenantId
-        const numericId = typeof target.id === 'number' ? target.id : parseInt(String(target.id), 10)
         if (!isNaN(numericId) && isAuthenticated) {
           await authSwitchTenant(numericId)
         }
 
         try {
-          localStorage.setItem(STORAGE_KEY, String(target.id))
+          localStorage.setItem(STORAGE_KEY, String(resolvedId))
         } catch {
           // ignore
         }
 
-        setActiveTenantId(target.id)
+        setActiveTenantId(resolvedId)
 
         // Clear all queries (categories, expenses, budgets, etc.) to prevent data bleeding
         queryClient.removeQueries()
@@ -156,7 +160,7 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({
           new CustomEvent('tenant-switched', {
             detail: {
               previousTenantId: activeTenant.id,
-              newTenantId: target.id,
+              newTenantId: resolvedId,
             },
           }),
         )

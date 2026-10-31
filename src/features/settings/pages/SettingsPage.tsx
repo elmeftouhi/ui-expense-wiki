@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import { cn } from '@/lib/utils'
 import { fieldInputClass, fieldInvalidClass } from '@/features/budgets/components/FormControls'
+import { DataTransferSettings } from '@/features/data-transfer/components/DataTransferSettings'
 import { PaymentMethodsSettings } from '@/features/payment-methods/PaymentMethodsSettings'
 import { usePaymentMethods } from '@/features/payment-methods/usePaymentMethods'
 import {
@@ -75,10 +76,26 @@ const COMMON_ROUNDING_METHODS = ['NONE', 'HALF_UP', 'UP', 'DOWN']
 const COMMON_REPORTING_PERIODS = ['CALENDAR_MONTH', 'QUARTERLY', 'YEARLY', 'FISCAL_YEAR']
 const QUICK_CHANNELS = ['IN_APP', 'EMAIL', 'PUSH'] as const
 
-function readInitialSectionFromLocation(): SettingsSectionId | null {
+type ConfigSectionId = Exclude<SettingsSectionId, 'payment-methods' | 'data-transfer'>
+
+function isConfigSection(section: SettingsSectionId): section is ConfigSectionId {
+  return section !== 'payment-methods' && section !== 'data-transfer'
+}
+
+function readInitialSectionFromLocation(fallback?: SettingsSectionId): SettingsSectionId | null {
+  if (fallback) return fallback
   if (typeof window === 'undefined') return null
+  if (window.location.pathname.endsWith('/data-transfer')) return 'data-transfer'
   const param = new URLSearchParams(window.location.search).get('section')
-  return isSettingsSectionId(param) ? param : null
+  if (isSettingsSectionId(param)) return param
+  try {
+    if (sessionStorage.getItem('expense_wiki_recent_import_receipt')) {
+      return 'data-transfer'
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null
 }
 
 function SettingRow({
@@ -129,7 +146,7 @@ function WorkspaceConfigurationForm({
   config: TenantConfiguration
   tenantId: number | string
   isAdmin: boolean
-  activeSection: Exclude<SettingsSectionId, 'payment-methods'>
+  activeSection: ConfigSectionId
   onSelectSection: (section: SettingsSectionId) => void
 }) {
   const update = useUpdateConfiguration(tenantId)
@@ -561,12 +578,17 @@ function WorkspaceConfigurationForm({
 function TenantSettingsWorkspace({
   tenantId,
   isAdmin,
+  initialSection,
 }: {
   tenantId: number | string
   isAdmin: boolean
+  initialSection?: SettingsSectionId
 }) {
   const isDesktop = useMediaQuery('(min-width: 768px)', true)
-  const initialUrlSection = useMemo(() => readInitialSectionFromLocation(), [])
+  const initialUrlSection = useMemo(
+    () => readInitialSectionFromLocation(initialSection),
+    [initialSection],
+  )
 
   const [desktopSection, setDesktopSection] = useState<SettingsSectionId>(
     initialUrlSection ?? 'financial',
@@ -606,10 +628,11 @@ function TenantSettingsWorkspace({
       'payment-methods': methodsQuery.data
         ? `${activeMethods.length} active${defaultMethod ? ` · ${defaultMethod.name}` : ''}`
         : undefined,
+      'data-transfer': 'JSON backup & workspace restore',
     }
   }, [configQuery.data, methodsQuery.data])
 
-  const renderConfigArea = (section: Exclude<SettingsSectionId, 'payment-methods'>) => {
+  const renderConfigArea = (section: ConfigSectionId) => {
     if (configQuery.isPending) {
       return (
         <div
@@ -647,6 +670,7 @@ function TenantSettingsWorkspace({
 
     return (
       <WorkspaceConfigurationForm
+        key={String(tenantId)}
         config={configQuery.data}
         tenantId={tenantId}
         isAdmin={isAdmin}
@@ -656,12 +680,15 @@ function TenantSettingsWorkspace({
     )
   }
 
-  const renderActivePanel = (section: SettingsSectionId) =>
-    section === 'payment-methods' ? (
-      <PaymentMethodsSettings isAdmin={isAdmin} />
-    ) : (
-      renderConfigArea(section)
-    )
+  const renderActivePanel = (section: SettingsSectionId) => {
+    if (section === 'payment-methods') {
+      return <PaymentMethodsSettings key={String(tenantId)} isAdmin={isAdmin} />
+    }
+    if (section === 'data-transfer') {
+      return <DataTransferSettings isAdmin={isAdmin} />
+    }
+    return renderConfigArea(section)
+  }
 
   /* Mobile (< 768px): Native iOS/Android-style Menu List -> Drill-down View */
   if (!isDesktop) {
@@ -777,18 +804,23 @@ function TenantSettingsWorkspace({
       </nav>
 
       <div className="min-w-0 max-w-3xl">
-        <div className={activeSection === 'payment-methods' ? 'hidden' : undefined}>
-          {renderConfigArea(
-            activeSection === 'payment-methods' ? 'financial' : activeSection,
-          )}
+        <div className={!isConfigSection(activeSection) ? 'hidden' : undefined}>
+          {renderConfigArea(isConfigSection(activeSection) ? activeSection : 'financial')}
         </div>
-        {activeSection === 'payment-methods' && <PaymentMethodsSettings isAdmin={isAdmin} />}
+        {activeSection === 'payment-methods' && (
+          <PaymentMethodsSettings key={String(tenantId)} isAdmin={isAdmin} />
+        )}
+        {activeSection === 'data-transfer' && <DataTransferSettings isAdmin={isAdmin} />}
       </div>
     </div>
   )
 }
 
-export function SettingsPage() {
+export function SettingsPage({
+  initialSection,
+}: {
+  initialSection?: SettingsSectionId
+} = {}) {
   const { activeTenant, isAdmin } = useActiveTenant()
 
   return (
@@ -805,9 +837,9 @@ export function SettingsPage() {
       </div>
 
       <TenantSettingsWorkspace
-        key={activeTenant.id}
         tenantId={activeTenant.id}
         isAdmin={isAdmin}
+        initialSection={initialSection}
       />
     </div>
   )

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { Bell, Coins, CreditCard, Globe } from 'lucide-react'
+import { ArrowLeftRight, Bell, Coins, CreditCard, Globe } from 'lucide-react'
 import type { ConfigurationFormValues } from '../schemas/configurationSchema'
 
 /**
@@ -14,6 +14,7 @@ export type SettingsSectionId =
   | 'regional'
   | 'alerts'
   | 'payment-methods'
+  | 'data-transfer'
 
 export interface SettingsSectionMeta {
   id: SettingsSectionId
@@ -71,6 +72,13 @@ export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
     label: 'Payment methods',
     description: 'Manage cards, accounts, and the default method for new entries.',
     icon: CreditCard,
+  },
+  {
+    id: 'data-transfer',
+    group: 'Data',
+    label: 'Data Transfer',
+    description: 'Export workspace backups as JSON or restore a backup into a new workspace.',
+    icon: ArrowLeftRight,
   },
 ]
 

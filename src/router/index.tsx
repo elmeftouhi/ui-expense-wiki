@@ -91,6 +91,10 @@ export const router = createBrowserRouter([
         element: <SettingsPage />,
       },
       {
+        path: 'settings/data-transfer',
+        element: <SettingsPage initialSection="data-transfer" />,
+      },
+      {
         path: '*',
         element: <Navigate to="/" replace />,
       },
