@@ -14,6 +14,7 @@ import { SubscriptionsPage } from '@/features/subscriptions/pages/SubscriptionsP
 import { SubscriptionDetailsPage } from '@/features/subscriptions/pages/SubscriptionDetailsPage'
 import { TenantManagementPage } from '@/features/tenants/pages/TenantManagementPage'
 import { SettingsPage } from '@/features/settings/pages/SettingsPage'
+import { NotificationsPage } from '@/features/notifications'
 import { LoginPage, RegisterPage } from '@/features/auth'
 import { Navigate } from 'react-router-dom'
 
@@ -93,6 +94,10 @@ export const router = createBrowserRouter([
       {
         path: 'settings/data-transfer',
         element: <SettingsPage initialSection="data-transfer" />,
+      },
+      {
+        path: 'notifications',
+        element: <NotificationsPage />,
       },
       {
         path: '*',

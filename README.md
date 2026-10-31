@@ -123,6 +123,7 @@ ui-expense-wiki/
 │   │   ├── dashboard/      # Analytics, KPI metrics, and reporting models
 │   │   ├── data-transfer/  # Workspace JSON backup export & isolated workspace import
 │   │   ├── expenses/       # Ledger, filters, expense lifecycle types & states
+│   │   ├── notifications/  # Notification center, real-time SSE stream & optimistic updates
 │   │   ├── receipts/       # OCR ingestion, document queue & upload models
 │   │   ├── settings/       # Live tenant configuration, regional formats & reminders
 │   │   └── tenants/        # Multi-tenant context, demo tenants, role types & switcher
@@ -579,6 +580,33 @@ provides full workspace backup export and non-destructive workspace restoration:
     `paymentMethods`, `budgets`, `budgetPeriodInstances`, `subscriptions`,
     `expenses`, `subscriptionPayments`, `notifications`, `activityLogs`), and a
     **Switch to imported workspace** action when `switchedDefaultTenant` is `false`.
+
+## Notification Center
+
+The Notification Center (`/notifications` and top-navigation bell dropdown/drawer)
+delivers live operational alerts with real-time SSE updates and robust offline/reconnect handling:
+
+- **APIs Integrated**:
+  - `GET /v1/notifications/page?page={page}&size={size}&status={SENT|READ|ARCHIVED}` — Paginated list
+  - `GET /v1/notifications/unread/count` — Real-time badge counter
+  - `PATCH /v1/notifications/{id}/mark-as-read` — Mark single notification as read
+  - `PATCH /v1/notifications/{id}/mark-as-archived` — Archive single notification
+  - `POST /v1/notifications/mark-all-as-read` — Bulk mark all read
+  - `GET /v1/notifications/stream` — SSE stream with `Authorization: Bearer <token>` and `X-Tenant-Id` headers
+- **Real-Time SSE & Fallback**:
+  - Connects automatically after authentication and workspace resolution.
+  - Handles `connected`, `notification-created`, `notification-updated`, and `notifications-bulk-read` events.
+  - Reconnects with exponential backoff on connection drops (1s, 2s, 4s, 8s, 16s, max 30s).
+  - Falls back to polling (unread count every 30s; first page every 60s when panel is active) whenever the stream is offline.
+- **Optimistic State Management**:
+  - Single-item and bulk actions apply immediately in the UI and roll back if server rejection occurs.
+  - Enforces monotonic lifecycle progression (`SENT` → `READ` → `ARCHIVED`) so stale responses or delayed events never revert state.
+- **UX Details**:
+  - Top header bell with live pulsating badge and unread counter.
+  - Filter tabs: **All**, **Unread**, **Read**, and **Archived**.
+  - Type-based color & icon badges (`PAYMENT_REMINDER`, `SUBSCRIPTION_NEXT`, `EXPENSE_DUE_SOON`, `EXPENSE_OVERDUE`, `BUDGET_ALERT`, `BUDGET_EXCEEDED`).
+  - Relative timestamps ("2m ago", "1h ago") with exact datetime tooltips.
+  - Clickable items route directly to linked resources (`/expenses/:id`, `/subscriptions/:id`, `/budgets/:id`).
 
 ---
 

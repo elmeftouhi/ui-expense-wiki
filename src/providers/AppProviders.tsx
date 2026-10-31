@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TenantProvider } from '@/features/tenants'
 import { AuthProvider } from '@/features/auth'
+import { NotificationProvider } from '@/features/notifications'
 import { ToastProvider } from '@/components/ui/toaster'
 
 interface AppProvidersProps {
@@ -28,7 +29,9 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <AuthProvider>
-          <TenantProvider>{children}</TenantProvider>
+          <TenantProvider>
+            <NotificationProvider>{children}</NotificationProvider>
+          </TenantProvider>
         </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>
