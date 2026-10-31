@@ -108,6 +108,7 @@ describe('subscription list and lifecycle actions', () => {
     await screen.findByRole('link', { name: 'Design tools' })
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 })))
+    await user.click(screen.getByRole('button', { name: /^Filters/ }))
     await user.click(screen.getByRole('checkbox', { name: 'Company card (default)' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethodId: 2, page: 0 })))
     expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethodId: 2 }))
@@ -116,22 +117,23 @@ describe('subscription list and lifecycle actions', () => {
     expect(subscriptionService.list).toHaveBeenCalledWith(expect.objectContaining({ paymentMethodId: undefined, page: 0 }))
   })
 
-  it('combines checkbox selections across groups and clears all filters and search', async () => {
+  it('combines status pills, categories, payment methods, and search and clears all filters', async () => {
     const user = userEvent.setup()
     const { Wrapper } = createWrapper()
     render(<SubscriptionsPage />, { wrapper: Wrapper })
     await screen.findByRole('link', { name: 'Design tools' })
-    const sidebar = within(screen.getByRole('complementary', { name: 'Subscription filters' }))
-    expect(sidebar.getByRole('group', { name: 'Categories' })).toBeInTheDocument()
-    expect(sidebar.getByRole('group', { name: 'Status' })).toBeInTheDocument()
-    expect(sidebar.getByRole('group', { name: 'Payment methods' })).toBeInTheDocument()
-    await user.click(sidebar.getByRole('checkbox', { name: 'Active' }))
-    await user.click(sidebar.getByRole('checkbox', { name: 'Paused' }))
-    await user.click(sidebar.getByRole('checkbox', { name: 'Company card (default)' }))
-    await user.click(sidebar.getByRole('checkbox', { name: 'Old card (inactive)' }))
-    await user.click(sidebar.getByRole('checkbox', { name: 'Software' }))
-    await user.click(sidebar.getByRole('checkbox', { name: 'Travel' }))
-    await user.type(sidebar.getByRole('searchbox'), 'Design')
+    const filterRegion = within(screen.getByRole('region', { name: 'Subscription filters' }))
+    const statusGroup = within(filterRegion.getByRole('group', { name: 'Status' }))
+    await user.click(statusGroup.getByRole('button', { name: 'Active' }))
+    await user.click(statusGroup.getByRole('button', { name: 'Paused' }))
+    await user.click(filterRegion.getByRole('button', { name: /^Filters/ }))
+    expect(filterRegion.getByRole('group', { name: 'Categories' })).toBeInTheDocument()
+    expect(filterRegion.getByRole('group', { name: 'Payment methods' })).toBeInTheDocument()
+    await user.click(filterRegion.getByRole('checkbox', { name: 'Company card (default)' }))
+    await user.click(filterRegion.getByRole('checkbox', { name: 'Old card (inactive)' }))
+    await user.click(filterRegion.getByRole('checkbox', { name: 'Software' }))
+    await user.click(filterRegion.getByRole('checkbox', { name: 'Travel' }))
+    await user.type(filterRegion.getByRole('searchbox', { name: 'Search subscriptions' }), 'Design')
     const selected = {
       search: 'Design', statuses: ['ACTIVE', 'PAUSED'], status: undefined,
       paymentMethodIds: [2, 3], paymentMethodId: undefined, categoryIds: [5, 7],
@@ -140,40 +142,37 @@ describe('subscription list and lifecycle actions', () => {
     expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining(selected))
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 })))
-    await user.click(sidebar.getByRole('checkbox', { name: 'Paused' }))
+    await user.click(statusGroup.getByRole('button', { name: 'Paused' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'ACTIVE', statuses: undefined, page: 0 })))
-    await user.click(sidebar.getByRole('button', { name: 'Clear all' }))
-    expect(sidebar.getAllByRole('checkbox').every((input) => !(input as HTMLInputElement).checked)).toBe(true)
-    expect(sidebar.getByRole('searchbox')).toHaveValue('')
+    await user.click(filterRegion.getByRole('button', { name: 'Clear all' }))
+    expect(filterRegion.getAllByRole('checkbox').every((input) => !(input as HTMLInputElement).checked)).toBe(true)
+    expect(filterRegion.getByRole('searchbox', { name: 'Search subscriptions' })).toHaveValue('')
     const cleared = { search: undefined, statuses: undefined, status: undefined, categoryIds: undefined, paymentMethodIds: undefined, paymentMethodId: undefined }
     await waitFor(() => expect(subscriptionService.list).toHaveBeenCalledWith(expect.objectContaining({ ...cleared, page: 0 })))
     expect(subscriptionService.recurringCosts).toHaveBeenCalledWith(expect.objectContaining(cleared))
   })
 
-  it('collapses status and payment-method parent rows without changing selected filters', async () => {
+  it('toggles the filter panel without changing selected filters', async () => {
     const user = userEvent.setup()
     const { Wrapper } = createWrapper()
     render(<SubscriptionsPage />, { wrapper: Wrapper })
     await screen.findByRole('link', { name: 'Design tools' })
-    const sidebar = within(screen.getByRole('complementary', { name: 'Subscription filters' }))
-    expect(sidebar.queryByRole('heading', { name: 'Filters' })).not.toBeInTheDocument()
-    expect(sidebar.queryByText('Categories')).not.toBeInTheDocument()
-    for (const [group, option] of [['Status', 'Active'], ['Payment methods', 'Company card (default)']]) {
-      await user.click(sidebar.getByRole('checkbox', { name: option }))
-      const calls = vi.mocked(subscriptionService.list).mock.calls.length
-      const costCalls = vi.mocked(subscriptionService.recurringCosts).mock.calls.length
-      const collapse = sidebar.getByRole('button', { name: `Collapse ${group}` })
-      expect(collapse).toHaveAttribute('aria-expanded', 'true')
-      await user.click(collapse)
-      expect(sidebar.queryByRole('checkbox', { name: option })).not.toBeInTheDocument()
-      const expand = sidebar.getByRole('button', { name: `Expand ${group}` })
-      expect(expand).toHaveAttribute('aria-expanded', 'false')
-      expand.focus()
-      await user.keyboard('{Enter}')
-      expect(sidebar.getByRole('checkbox', { name: option })).toBeChecked()
-      expect(subscriptionService.list).toHaveBeenCalledTimes(calls)
-      expect(subscriptionService.recurringCosts).toHaveBeenCalledTimes(costCalls)
-    }
+    const filterRegion = within(screen.getByRole('region', { name: 'Subscription filters' }))
+    const filterBtn = filterRegion.getByRole('button', { name: /^Filters/ })
+    expect(filterBtn).toHaveAttribute('aria-expanded', 'false')
+    await user.click(filterBtn)
+    expect(filterBtn).toHaveAttribute('aria-expanded', 'true')
+    await user.click(filterRegion.getByRole('checkbox', { name: 'Company card (default)' }))
+    await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ paymentMethodId: 2 })))
+    const calls = vi.mocked(subscriptionService.list).mock.calls.length
+    const costCalls = vi.mocked(subscriptionService.recurringCosts).mock.calls.length
+    await user.click(filterBtn)
+    expect(filterBtn).toHaveAttribute('aria-expanded', 'false')
+    expect(filterRegion.queryByRole('checkbox', { name: 'Company card (default)' })).not.toBeInTheDocument()
+    await user.click(filterBtn)
+    expect(filterRegion.getByRole('checkbox', { name: 'Company card (default)' })).toBeChecked()
+    expect(subscriptionService.list).toHaveBeenCalledTimes(calls)
+    expect(subscriptionService.recurringCosts).toHaveBeenCalledTimes(costCalls)
   })
 
   it('uses the tenant euro currency for list amounts, monthly equivalents, totals and edits despite legacy USD records', async () => {
@@ -233,6 +232,7 @@ describe('subscription list and lifecycle actions', () => {
     render(<SubscriptionsPage />, { wrapper: Wrapper })
     await screen.findByRole('link', { name: 'Design tools' })
     await user.click(screen.getByRole('button', { name: 'Next page' }))
+    await user.click(screen.getByRole('button', { name: /^Filters/ }))
     await user.click(screen.getByRole('checkbox', { name: 'Software' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(
       expect.objectContaining({ categoryIds: [5, 8, 9, 10], page: 0 }),
@@ -322,7 +322,7 @@ describe('subscription list and lifecycle actions', () => {
     await screen.findByRole('link', { name: 'Design tools' })
     const selector = screen.getByRole('combobox', { name: 'Rows per page' })
     expect(selector).toHaveValue('10')
-    await user.click(screen.getByRole('checkbox', { name: 'Active' }))
+    await user.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Active' }))
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     expect(await screen.findByText('11–20 of 121')).toBeInTheDocument()
     for (const size of [25, 50, 100]) {
@@ -345,7 +345,7 @@ describe('subscription list and lifecycle actions', () => {
     render(<SubscriptionsPage />, { wrapper: Wrapper })
     expect(await screen.findByRole('link', { name: 'Design tools' })).toHaveAttribute('href', '/subscriptions/12')
     expect(within(screen.getByRole('table')).getByText('$45.00')).toBeInTheDocument()
-    expect(within(screen.getByRole('table')).getByText('Monthly')).toBeInTheDocument()
+    expect(within(screen.getByRole('table')).getByText(/Monthly/)).toBeInTheDocument()
     expect(screen.getByText('Nov 5, 2026')).toBeInTheDocument()
     const table = within(screen.getByRole('table'))
     expect(table.getAllByRole('columnheader')).toHaveLength(5)
@@ -356,8 +356,9 @@ describe('subscription list and lifecycle actions', () => {
     expect(screen.queryByLabelText('Next billing to')).not.toBeInTheDocument()
     expect(table.getByRole('link', { name: 'View Design tools' })).toHaveAttribute('href', '/subscriptions/12')
 
-    await user.click(screen.getByRole('checkbox', { name: 'Active' }))
+    await user.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Active' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'ACTIVE', page: 0 })))
+    await user.click(screen.getByRole('button', { name: /^Filters/ }))
     await user.click(screen.getByRole('checkbox', { name: 'Software' }))
     await waitFor(() => expect(subscriptionService.list).toHaveBeenLastCalledWith(expect.objectContaining({ categoryIds: [5] })))
     await user.type(screen.getByRole('searchbox', { name: 'Search subscriptions' }), 'Design')
@@ -416,7 +417,7 @@ describe('subscription list and lifecycle actions', () => {
     else expect(row).not.toHaveTextContent(/Overdue|days? left|Due today/)
   })
 
-  it('updates both cost cards for search, category and status while keeping totals independent of pagination', async () => {
+  it('updates both cost totals for search, category and status while keeping totals independent of pagination', async () => {
     const user = userEvent.setup()
     vi.mocked(subscriptionService.recurringCosts).mockResolvedValueOnce([
       { currency: 'EUR', monthly: 20, yearly: 240 },
@@ -427,18 +428,17 @@ describe('subscription list and lifecycle actions', () => {
     const costs = within(screen.getByLabelText('Recurring subscription costs'))
     expect(await costs.findByText('$120.00')).toBeInTheDocument()
     expect(costs.getByText('$1,440.00')).toBeInTheDocument()
-    const monthlyCard = costs.getByText('Monthly equivalent').parentElement
-    const yearlyCard = costs.getByText('Yearly equivalent').parentElement
-    expect(monthlyCard).not.toBe(yearlyCard)
-    expect(monthlyCard).toHaveClass('border')
-    expect(yearlyCard).toHaveClass('border')
-    expect(within(monthlyCard as HTMLElement).getByText('$120.00')).toBeInTheDocument()
-    expect(within(yearlyCard as HTMLElement).getByText('$1,440.00')).toBeInTheDocument()
-    await user.click(screen.getByRole('checkbox', { name: 'Paused' }))
+    const monthlyCell = costs.getByText('Monthly equivalent').parentElement
+    const yearlyCell = costs.getByText('Yearly equivalent').parentElement
+    expect(monthlyCell).not.toBe(yearlyCell)
+    expect(within(monthlyCell as HTMLElement).getByText('$120.00')).toBeInTheDocument()
+    expect(within(yearlyCell as HTMLElement).getByText('$1,440.00')).toBeInTheDocument()
+    await user.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Paused' }))
     expect(await costs.findByText('$25.00')).toBeInTheDocument()
     expect(costs.getByText('$300.00')).toBeInTheDocument()
     expect(costs.queryByText('$120.00')).not.toBeInTheDocument()
     expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'PAUSED', search: undefined, categoryIds: undefined }))
+    await user.click(screen.getByRole('button', { name: /^Filters/ }))
     await user.click(screen.getByRole('checkbox', { name: 'Software' }))
     await waitFor(() => expect(subscriptionService.recurringCosts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'PAUSED', search: undefined, categoryIds: [5] })))
     await user.type(screen.getByRole('searchbox', { name: 'Search subscriptions' }), 'Design')
@@ -556,13 +556,55 @@ describe('subscription list and lifecycle actions', () => {
     expect(screen.queryByRole('button', { name: 'Edit Design tools' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View Design tools' })).toHaveAttribute('href', '/subscriptions/12')
   })
+
+  it('renders mobile cards and opens filters in a bottom sheet on small screens', async () => {
+    const user = userEvent.setup()
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+
+    try {
+      const { Wrapper } = createWrapper()
+      render(
+        <Routes>
+          <Route path="/subscriptions" element={<SubscriptionsPage />} />
+          <Route path="/subscriptions/:subscriptionId" element={<SubscriptionDetailsPage />} />
+        </Routes>,
+        { wrapper: Wrapper },
+      )
+
+      const link = await screen.findByRole('link', { name: 'Design tools' })
+      expect(screen.queryByRole('table')).not.toBeInTheDocument()
+      expect(link.closest('li')).toHaveTextContent('$45.00')
+
+      await user.click(screen.getByRole('button', { name: /^Filters/ }))
+      const sheet = screen.getByRole('dialog', { name: 'Filter subscriptions' })
+      expect(within(sheet).getByRole('group', { name: 'Categories' })).toBeInTheDocument()
+      await user.click(within(sheet).getByRole('button', { name: 'Done' }))
+      expect(screen.queryByRole('dialog', { name: 'Filter subscriptions' })).not.toBeInTheDocument()
+
+      await user.click(link.closest('li') as HTMLElement)
+      expect(await screen.findByRole('heading', { name: 'Design tools' })).toBeInTheDocument()
+    } finally {
+      window.matchMedia = originalMatchMedia
+    }
+  })
 })
 
 describe('subscription details and payments', () => {
   it('shows subscription details and a paginated generated-expense history', async () => {
     renderDetails('/subscriptions/12')
     expect(await screen.findByRole('heading', { name: 'Design tools' })).toBeInTheDocument()
-    expect(screen.getByText('This schedule is separate from payments and expense totals.')).toBeInTheDocument()
+    expect(screen.getByText('Monthly billing')).toBeInTheDocument()
+    expect(screen.getByText('Software')).toBeInTheDocument()
     expect(await screen.findByText('#902')).toBeInTheDocument()
     expect(screen.getByText('PENDING')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '#902' })).toHaveAttribute('href', '/expenses/902')

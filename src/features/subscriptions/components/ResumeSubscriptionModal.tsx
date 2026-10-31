@@ -26,7 +26,10 @@ export function ResumeSubscriptionModal({
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<ResumeValues>({ resolver: zodResolver(resumeSchema), defaultValues: { nextBillingDate: '' } })
+  } = useForm<ResumeValues>({
+    resolver: zodResolver(resumeSchema),
+    defaultValues: { nextBillingDate: '' },
+  })
 
   const submit = async ({ nextBillingDate }: ResumeValues) => {
     setServerError(null)
@@ -41,25 +44,32 @@ export function ResumeSubscriptionModal({
   return (
     <SubscriptionDialog
       title="Resume subscription"
-      description="Choose the next billing date. Missed dates while paused will not be generated."
+      description="Missed dates while paused won't be billed."
       onClose={onClose}
       dismissible={!isSubmitting}
+      className="sm:max-w-md"
     >
-      {serverError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{serverError}</p>}
+      {serverError && (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+          {serverError}
+        </p>
+      )}
       <form noValidate onSubmit={handleSubmit(submit)} className="space-y-4">
         <FormField label="Next billing date" htmlFor="resume-next-date" required error={errors.nextBillingDate?.message}>
           <input
             id="resume-next-date"
             autoFocus
             type="date"
-            className={cn(fieldInputClass, errors.nextBillingDate && fieldInvalidClass)}
+            className={cn(fieldInputClass, 'font-mono tabular-nums', errors.nextBillingDate && fieldInvalidClass)}
             {...register('nextBillingDate')}
           />
         </FormField>
         <div className="flex justify-end gap-2 border-t border-border/60 pt-3">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-          <Button type="submit" disabled={isSubmitting} className="gap-2">
-            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSubmitting} className="h-9">
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={isSubmitting} className="h-9 gap-1.5">
+            {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Resume subscription
           </Button>
         </div>

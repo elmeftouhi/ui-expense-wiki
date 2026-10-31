@@ -16,7 +16,10 @@ import {
 } from '../schemas/backfillPaymentSchema'
 import { SubscriptionDialog } from './SubscriptionDialog'
 
-export function BackfillPaymentModal({ subscriptionId, onClose }: {
+export function BackfillPaymentModal({
+  subscriptionId,
+  onClose,
+}: {
   subscriptionId: number
   onClose: () => void
 }) {
@@ -74,18 +77,34 @@ export function BackfillPaymentModal({ subscriptionId, onClose }: {
   return (
     <SubscriptionDialog
       title="Add historical payment"
-      description="Record a payment that already happened, for example when importing an existing subscription."
       onClose={onClose}
       dismissible={!busy}
+      className="sm:max-w-md"
     >
-      <p className="flex gap-2 rounded-lg border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+      <p className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 p-2.5 text-[11px] text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span>Use this for past payments or imports only. A linked expense is created for the billing date, and the subscription's next billing date is kept in sync.</span>
+        <span>For past payments or imports — creates a linked expense for the billing date.</span>
       </p>
-      {serverError && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{serverError}</p>}
-      {notice && <p role="status" className="rounded-lg border border-border/60 bg-muted/40 p-3 text-xs">{notice}</p>}
+
+      {serverError && (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+          {serverError}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="rounded-lg border border-border/60 bg-muted/40 p-3 text-xs">
+          {notice}
+        </p>
+      )}
+
       <form noValidate onSubmit={handleSubmit(submit)} className="space-y-4">
-        <FormField label="Scheduled billing date" htmlFor="backfill-scheduled-date" required error={errors.scheduledBillingDate?.message} hint="Today or earlier.">
+        <FormField
+          label="Scheduled billing date"
+          htmlFor="backfill-scheduled-date"
+          required
+          error={errors.scheduledBillingDate?.message}
+          hint="Today or earlier."
+        >
           <input
             id="backfill-scheduled-date"
             autoFocus
@@ -93,24 +112,33 @@ export function BackfillPaymentModal({ subscriptionId, onClose }: {
             max={today}
             aria-invalid={errors.scheduledBillingDate ? true : undefined}
             aria-describedby={errors.scheduledBillingDate ? 'backfill-scheduled-date-error' : 'backfill-scheduled-date-hint'}
-            className={cn(fieldInputClass, errors.scheduledBillingDate && fieldInvalidClass)}
+            className={cn(fieldInputClass, 'font-mono tabular-nums', errors.scheduledBillingDate && fieldInvalidClass)}
             {...scheduledField}
           />
         </FormField>
-        <FormField label="Paid date" htmlFor="backfill-paid-date" error={errors.paidDate?.message} hint="Optional. Prefilled with the scheduled billing date.">
+
+        <FormField
+          label="Paid date"
+          htmlFor="backfill-paid-date"
+          error={errors.paidDate?.message}
+          hint="Optional. Prefilled from billing date."
+        >
           <input
             id="backfill-paid-date"
             type="date"
             aria-invalid={errors.paidDate ? true : undefined}
             aria-describedby={errors.paidDate ? 'backfill-paid-date-error' : 'backfill-paid-date-hint'}
-            className={cn(fieldInputClass, errors.paidDate && fieldInvalidClass)}
+            className={cn(fieldInputClass, 'font-mono tabular-nums', errors.paidDate && fieldInvalidClass)}
             {...paidField}
           />
         </FormField>
+
         <div className="flex justify-end gap-2 border-t border-border/60 pt-3">
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" disabled={busy} aria-busy={busy} className="gap-2">
-            {busy && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={busy} className="h-9">
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={busy} aria-busy={busy} className="h-9 gap-1.5">
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />}
             {busy ? 'Adding payment...' : 'Add payment'}
           </Button>
         </div>

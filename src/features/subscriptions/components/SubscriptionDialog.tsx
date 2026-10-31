@@ -12,6 +12,9 @@ interface SubscriptionDialogProps {
   className?: string
 }
 
+/**
+ * Responsive dialog: bottom-anchored sheet on mobile (< 640px) and centered modal on desktop.
+ */
 export function SubscriptionDialog({
   title,
   description,
@@ -28,7 +31,9 @@ export function SubscriptionDialog({
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    dialogRef.current?.focus()
+    if (!dialogRef.current?.contains(document.activeElement)) {
+      dialogRef.current?.focus()
+    }
     return () => {
       document.body.style.overflow = previousOverflow
       if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus()
@@ -37,7 +42,8 @@ export function SubscriptionDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-xs sm:items-center sm:bg-background/80 sm:p-4 sm:backdrop-blur-sm"
+      onClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => {
         if (dismissible && event.target === event.currentTarget) onClose()
       }}
@@ -74,21 +80,31 @@ export function SubscriptionDialog({
           }
         }}
         className={cn(
-          'custom-scrollbar max-h-[92vh] w-full max-w-xl space-y-5 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl',
+          'dialog-enter custom-scrollbar max-h-[90vh] w-full space-y-4 overflow-y-auto rounded-t-2xl border border-border bg-card p-5 pb-6 text-card-foreground shadow-2xl sm:max-w-lg sm:rounded-xl sm:p-5 sm:shadow-xl',
           className,
         )}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-border/60 pb-3">
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-1 h-1 w-10 rounded-full bg-muted-foreground/25 sm:hidden"
+        />
+        <header className="flex items-start justify-between gap-3 border-b border-border/60 pb-3">
           <div>
-            <h2 id={titleId} className="text-base font-bold text-foreground">{title}</h2>
-            {description && <p id={descriptionId} className="mt-1 text-xs text-muted-foreground">{description}</p>}
+            <h2 id={titleId} className="text-base font-semibold text-foreground">
+              {title}
+            </h2>
+            {description && (
+              <p id={descriptionId} className="mt-0.5 text-xs text-muted-foreground">
+                {description}
+              </p>
+            )}
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={!dismissible}
             aria-label="Close dialog"
-            className="rounded-lg p-1 text-muted-foreground hover:bg-muted disabled:opacity-50"
+            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
           >
             <X className="h-4 w-4" />
           </button>
