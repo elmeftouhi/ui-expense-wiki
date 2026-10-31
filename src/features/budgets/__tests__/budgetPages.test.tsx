@@ -72,6 +72,82 @@ describe('budget pages', () => {
     expect(await screen.findByRole('button', { name: 'Adjust period October 2026' })).toBeInTheDocument()
   })
 
+  it('sorts active budgets by urgency first and supports 1-tap overview filtering and card tap navigation', async () => {
+    const user = userEvent.setup()
+    const onTrackBudget = {
+      ...budget,
+      id: 1,
+      name: 'Alpha software',
+      currentPeriod: { ...period, id: 11, spentAmount: 200 },
+    }
+    const exceededBudget = {
+      ...budget,
+      id: 2,
+      name: 'Zeta hosting',
+      currentPeriod: { ...period, id: 12, spentAmount: 1250 },
+    }
+    const inactiveBudget = {
+      ...budget,
+      id: 3,
+      name: 'Beta archived',
+      active: false,
+      currentPeriod: { ...period, id: 13, spentAmount: 1300 },
+    }
+    vi.mocked(budgetService.getAll).mockResolvedValue([onTrackBudget, inactiveBudget, exceededBudget])
+    vi.mocked(budgetService.getById).mockResolvedValue(exceededBudget)
+
+    const { Wrapper } = createWrapper()
+    render(
+      <Routes>
+        <Route path="/budgets" element={<BudgetsPage />} />
+        <Route path="/budgets/:budgetId" element={<BudgetDetailsPage />} />
+      </Routes>,
+      { wrapper: Wrapper },
+    )
+
+    await screen.findByTestId('budget-card-2')
+    const cards = screen.getAllByTestId(/budget-card-/)
+    expect(cards.map((el) => el.getAttribute('data-testid'))).toEqual([
+      'budget-card-2',
+      'budget-card-1',
+      'budget-card-3',
+    ])
+    expect(screen.getByTestId('budget-card-2')).toHaveTextContent('$250.00')
+    expect(screen.getByTestId('budget-card-2')).toHaveTextContent('over')
+
+    const overview = screen.getByRole('region', { name: 'Budgets overview' })
+    await user.click(within(overview).getByRole('button', { name: /Exceeded/i }))
+    expect(screen.queryByTestId('budget-card-1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('budget-card-2')).toBeInTheDocument()
+
+    // Clicking the card body navigates to budget details
+    await user.click(screen.getByTestId('budget-card-2'))
+    expect(await screen.findByRole('heading', { name: 'Zeta hosting' })).toBeInTheDocument()
+  })
+
+  it('hides the desktop table switcher on small screens', async () => {
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+
+    try {
+      const { Wrapper } = createWrapper()
+      render(<BudgetsPage />, { wrapper: Wrapper })
+      expect(await screen.findByTestId('budget-card-1')).toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'View mode' })).not.toBeInTheDocument()
+    } finally {
+      window.matchMedia = originalMatchMedia
+    }
+  })
+
   it('creates a budget, refreshes the list and emits a success toast', async () => {
     const user = userEvent.setup()
     const created = { ...budget, id: 2, name: 'New cap', description: undefined, currentPeriod: null }

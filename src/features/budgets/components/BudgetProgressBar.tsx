@@ -10,13 +10,13 @@ interface BudgetProgressBarProps {
 }
 
 const FILL_BY_HEALTH: Record<BudgetPeriodSummary['health'], string> = {
-  ON_TRACK: 'bg-gradient-to-r from-emerald-500 to-emerald-400',
-  WARNING: 'bg-gradient-to-r from-amber-500 to-amber-400',
-  EXCEEDED: 'bg-gradient-to-r from-rose-600 to-destructive',
+  ON_TRACK: 'bg-primary',
+  WARNING: 'bg-amber-500',
+  EXCEEDED: 'bg-destructive',
 }
 
 /**
- * Consumption bar with a tick marking where the warning threshold sits.
+ * Consumption bar with a subtle tick marking where the warning threshold sits.
  */
 export const BudgetProgressBar: React.FC<BudgetProgressBarProps> = ({ summary, className, size = 'md' }) => {
   const fill = Number.isFinite(summary.consumedPercent) ? Math.min(100, Math.max(0, summary.consumedPercent)) : 100
@@ -34,19 +34,22 @@ export const BudgetProgressBar: React.FC<BudgetProgressBarProps> = ({ summary, c
       aria-valuetext={`${label} of allocation spent`}
       className={cn(
         'relative w-full overflow-hidden rounded-full bg-muted',
-        size === 'sm' ? 'h-1.5' : 'h-2.5',
+        size === 'sm' ? 'h-1.5' : 'h-2',
         className,
       )}
     >
       <div
-        className={cn('h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none', FILL_BY_HEALTH[summary.health])}
+        className={cn(
+          'h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none',
+          FILL_BY_HEALTH[summary.health],
+        )}
         style={{ width: `${fill}%` }}
       />
-      {warningPos !== null && warningPos < 100 && (
+      {warningPos !== null && warningPos > 0 && warningPos < 100 && (
         <span
           aria-hidden
           title="Warning threshold"
-          className="absolute top-0 h-full w-0.5 bg-foreground/40"
+          className="absolute top-0 h-full w-px bg-foreground/30"
           style={{ left: `${warningPos}%` }}
         />
       )}

@@ -11,7 +11,7 @@ const HEALTH_CONFIG: Record<
   ON_TRACK: { label: 'On track', variant: 'success', icon: CheckCircle2 },
   WARNING: { label: 'Near limit', variant: 'warning', icon: AlertTriangle },
   EXCEEDED: { label: 'Exceeded', variant: 'destructive', icon: ShieldAlert },
-  NO_PERIOD: { label: 'No activity yet', variant: 'outline', icon: CircleDashed },
+  NO_PERIOD: { label: 'No activity', variant: 'outline', icon: CircleDashed },
 }
 
 export const BudgetHealthBadge: React.FC<{ health: BudgetHealth; className?: string }> = ({
@@ -20,7 +20,7 @@ export const BudgetHealthBadge: React.FC<{ health: BudgetHealth; className?: str
 }) => {
   const { label, variant, icon: Icon } = HEALTH_CONFIG[health]
   return (
-    <Badge variant={variant} className={cn('gap-1 text-[10px] font-semibold', className)}>
+    <Badge variant={variant} className={cn('gap-1 px-1.5 py-0 text-[10px] font-semibold', className)}>
       <Icon className="h-3 w-3" />
       {label}
     </Badge>
@@ -36,9 +36,9 @@ export const PeriodStatusBadge: React.FC<{ status: BudgetPeriodStatus; className
   return (
     <Badge
       variant={isOpen ? 'info' : 'secondary'}
-      className={cn('gap-1 text-[10px] font-semibold tracking-wide', className)}
+      className={cn('gap-1 px-1.5 py-0 text-[10px] font-medium tracking-wide', className)}
     >
-      <Icon className="h-3 w-3" />
+      <Icon className="h-2.5 w-2.5" />
       {status}
     </Badge>
   )

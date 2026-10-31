@@ -1,4 +1,4 @@
-import { useContext, useEffect } from 'react'
+import { useContext, useEffect, useRef } from 'react'
 import { TenantContext } from './context'
 import type { TenantContextValue } from '../types'
 
@@ -18,8 +18,11 @@ export function useActiveTenant(): TenantContextValue {
  */
 export function useResetOnTenantChange(onReset: () => void): void {
   const { activeTenant } = useActiveTenant()
+  const previousTenantIdRef = useRef(activeTenant.id)
 
   useEffect(() => {
+    if (previousTenantIdRef.current === activeTenant.id) return
+    previousTenantIdRef.current = activeTenant.id
     onReset()
   }, [activeTenant.id, onReset])
 }

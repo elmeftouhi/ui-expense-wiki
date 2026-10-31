@@ -5,17 +5,35 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
 import { ToastProvider } from '@/components/ui/toaster'
+import { TenantContext } from '@/features/tenants/context/context'
+import type { TenantContextValue } from '@/features/tenants/types'
 import { ExpensesPage } from '../pages/ExpensesPage'
 import type { ExpensePageResponse } from '../types'
 import { expense } from './expenseFixtures'
 
-vi.mock('@/features/tenants', () => ({
-  useActiveTenant: () => ({
-    activeTenant: { id: 1, name: 'Test workspace', currency: 'USD', locale: 'en-US' },
+function makeTenantContext(tenantId: number | string = 1): TenantContextValue {
+  const activeTenant = {
+    id: tenantId,
+    name: 'Test workspace',
+    slug: 'test',
+    currency: 'USD',
+    locale: 'en-US',
+    status: 'ACTIVE' as const,
+    plan: 'PRO' as const,
+    fiscalYearStartMonth: 1,
+  }
+  return {
+    activeTenant,
+    availableTenants: [activeTenant],
+    memberships: [],
+    currentRole: 'VIEWER',
+    isSwitching: false,
+    switchTenant: vi.fn(),
+    hasMinimumRole: () => false,
+    isAdmin: false,
     canEdit: false,
-  }),
-  useResetOnTenantChange: () => undefined,
-}))
+  }
+}
 
 vi.mock('@/features/budgets/hooks/useCategoryOptions', () => ({
   useCategoryOptions: () => ({
@@ -53,10 +71,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderPage(initialEntry = '/expenses') {
+function renderPage(initialEntry = '/expenses', tenantId: number | string = 1) {
   return render(
     <QueryClientProvider client={client}>
-      <ToastProvider><MemoryRouter initialEntries={[initialEntry]}><ExpensesPage /></MemoryRouter></ToastProvider>
+      <TenantContext.Provider value={makeTenantContext(tenantId)}>
+        <ToastProvider><MemoryRouter initialEntries={[initialEntry]}><ExpensesPage /></MemoryRouter></ToastProvider>
+      </TenantContext.Provider>
     </QueryClientProvider>,
   )
 }
@@ -333,5 +353,45 @@ describe('expense filter requests', () => {
     await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith('/v1/expenses', {
       params: { year: now.getFullYear(), month: now.getMonth() + 1, page: 0, size: 25, sort: 'dueDate,desc' },
     }))
+  })
+
+  it('keeps subcategory chips visible with real useResetOnTenantChange, prunes orphaned parents, and resets when switching tenants', async () => {
+    const user = userEvent.setup()
+    const view = render(
+      <QueryClientProvider client={client}>
+        <TenantContext.Provider value={makeTenantContext(1)}>
+          <ToastProvider><MemoryRouter initialEntries={['/expenses']}><ExpensesPage /></MemoryRouter></ToastProvider>
+        </TenantContext.Provider>
+      </QueryClientProvider>,
+    )
+    await screen.findByText('100 expenses')
+
+    // Select parent category Utilities -> shows Electricity, Home meter, Water under search
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Utilities' }))
+    expect(screen.getByRole('button', { name: 'Remove Electricity' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Remove Home meter' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Remove Water' })).toBeVisible()
+
+    // Removing all visible subcategory chips prunes the hidden parent ID as well
+    await user.click(screen.getByRole('button', { name: 'Remove Electricity' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Home meter' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Water' }))
+    await waitFor(() => expect(vi.mocked(apiClient.get).mock.lastCall?.[1]?.params).not.toHaveProperty('categoryIds'))
+    expect(screen.queryByRole('button', { name: 'Clear categories' })).not.toBeInTheDocument()
+
+    // Re-select parent Utilities, then switch tenant -> resets category chips
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Utilities' }))
+    expect(screen.getByRole('button', { name: 'Remove Water' })).toBeVisible()
+
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <TenantContext.Provider value={makeTenantContext(2)}>
+          <ToastProvider><MemoryRouter initialEntries={['/expenses']}><ExpensesPage /></MemoryRouter></ToastProvider>
+        </TenantContext.Provider>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Water' })).not.toBeInTheDocument())
   })
 })

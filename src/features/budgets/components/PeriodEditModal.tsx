@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { AlertCircle, CalendarRange, Info, Loader2, Save } from 'lucide-react'
+import { AlertCircle, Info, Loader2, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -73,17 +73,15 @@ const PeriodEditInner: React.FC<Omit<PeriodEditModalProps, 'period'> & { period:
 
   return (
     <BudgetDialog
-      title={`Adjust period · ${periodLabel}`}
-      description="Changes apply to this period instance only. Spend is recalculated by the backend from linked expenses."
-      icon={<CalendarRange className="h-5 w-5" />}
+      title={`Adjust ${periodLabel}`}
       onClose={onClose}
       dismissible={!isSubmitting}
     >
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-        <PeriodStatusBadge status={period.status} />
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
-          Spent so far: <span className="font-mono font-semibold text-foreground">{money(period.spentAmount)}</span>
+          Spent: <span className="font-mono font-semibold text-foreground">{money(period.spentAmount)}</span>
         </span>
+        <PeriodStatusBadge status={period.status} />
       </div>
 
       {period.status === 'CLOSED' && (
@@ -94,7 +92,10 @@ const PeriodEditInner: React.FC<Omit<PeriodEditModalProps, 'period'> & { period:
       )}
 
       {serverError && (
-        <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive"
+        >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{serverError}</span>
         </div>
@@ -113,7 +114,7 @@ const PeriodEditInner: React.FC<Omit<PeriodEditModalProps, 'period'> & { period:
           />
         </FormField>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3.5 sm:grid-cols-2">
           <FormField label="Warning type" htmlFor="period-warning-type">
             <Controller
               control={control}
@@ -146,19 +147,22 @@ const PeriodEditInner: React.FC<Omit<PeriodEditModalProps, 'period'> & { period:
         </div>
 
         {preview && (
-          <div data-testid="period-preview" className="grid grid-cols-3 gap-2 rounded-xl border border-border/60 bg-muted/30 p-3 text-[11px]">
-            <div>
+          <div
+            data-testid="period-preview"
+            className="grid grid-cols-3 divide-x divide-border/60 rounded-xl border border-border/60 bg-muted/25 p-3 text-[11px]"
+          >
+            <div className="pr-2">
               <p className="text-muted-foreground">Remaining</p>
-              <p className={cn('font-mono font-semibold', preview.remaining < 0 ? 'text-destructive' : 'text-foreground')}>
+              <p className={cn('mt-0.5 font-mono font-semibold tabular-nums', preview.remaining < 0 ? 'text-destructive' : 'text-foreground')}>
                 {money(preview.remaining)}
               </p>
             </div>
-            <div>
+            <div className="px-2">
               <p className="text-muted-foreground">Warns at</p>
-              <p className="font-mono font-semibold text-foreground">{money(preview.warningAt)}</p>
+              <p className="mt-0.5 font-mono font-semibold tabular-nums text-foreground">{money(preview.warningAt)}</p>
             </div>
-            <div className="flex flex-col items-start gap-1">
-              <p className="text-muted-foreground">Status after save</p>
+            <div className="flex flex-col items-start gap-1 pl-2">
+              <p className="text-muted-foreground">Status</p>
               <BudgetHealthBadge health={preview.health} />
             </div>
           </div>

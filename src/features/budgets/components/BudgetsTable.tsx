@@ -1,7 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil } from 'lucide-react'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
@@ -21,61 +20,109 @@ interface BudgetsTableProps {
   onEdit: (budget: Budget) => void
 }
 
-export const BudgetsTable: React.FC<BudgetsTableProps> = ({ budgets, categoriesById, currency, locale, canEdit, onEdit }) => {
+export const BudgetsTable: React.FC<BudgetsTableProps> = ({
+  budgets,
+  categoriesById,
+  currency,
+  locale,
+  canEdit,
+  onEdit,
+}) => {
   const money = (n: number) => formatCurrency(n, { currency, locale })
 
   return (
-    <Card className="overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-border/80 bg-card text-card-foreground shadow-xs">
       <div className="custom-scrollbar overflow-x-auto">
-        <table className="w-full min-w-[880px] text-xs">
-          <thead className="bg-muted/40">
-            <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <table className="w-full min-w-[820px] text-xs">
+          <thead className="border-b border-border/60 bg-muted/30">
+            <tr className="text-left text-[11px] font-medium text-muted-foreground">
               <th scope="col" className="px-4 py-2.5">Budget</th>
-              <th scope="col" className="px-4 py-2.5">Current period</th>
+              <th scope="col" className="px-4 py-2.5">Period</th>
               <th scope="col" className="px-4 py-2.5 text-right">Allocated</th>
               <th scope="col" className="px-4 py-2.5 text-right">Spent</th>
               <th scope="col" className="px-4 py-2.5 text-right">Remaining</th>
               <th scope="col" className="w-36 px-4 py-2.5">Usage</th>
-              <th scope="col" className="px-4 py-2.5">Health</th>
-              {canEdit && <th scope="col" className="px-4 py-2.5"><span className="sr-only">Actions</span></th>}
+              <th scope="col" className="px-4 py-2.5">Status</th>
+              {canEdit && (
+                <th scope="col" className="px-4 py-2.5">
+                  <span className="sr-only">Actions</span>
+                </th>
+              )}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/50">
             {budgets.map((budget) => {
               const period = budget.currentPeriod
               const s = period ? summarizePeriod(period) : null
               return (
-                <tr key={budget.id} className={cn('border-t border-border/50 transition-colors hover:bg-muted/30', !budget.active && 'opacity-70')}>
+                <tr
+                  key={budget.id}
+                  className={cn(
+                    'transition-colors hover:bg-muted/25',
+                    !budget.active && 'opacity-65',
+                  )}
+                >
                   <td className="max-w-64 px-4 py-3">
-                    <Link to={`/budgets/${budget.id}`} className="font-semibold text-foreground hover:text-primary">
-                      {budget.name}
-                    </Link>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground">
-                      {PERIODICITY_LABELS[budget.periodicity]}
-                      {!budget.active && ' · Inactive'}
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/budgets/${budget.id}`}
+                        className="truncate font-semibold text-foreground hover:text-primary"
+                      >
+                        {budget.name}
+                      </Link>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {PERIODICITY_LABELS[budget.periodicity]}
+                        {!budget.active && ' · Inactive'}
+                      </span>
                     </div>
-                    <BudgetCategoryChips categoryIds={budget.categoryIds} categoriesById={categoriesById} max={2} className="mt-1.5" />
+                    <BudgetCategoryChips
+                      categoryIds={budget.categoryIds}
+                      categoriesById={categoriesById}
+                      max={2}
+                      className="mt-1.5"
+                    />
                   </td>
                   <td className="px-4 py-3">
                     {period ? (
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="font-medium text-foreground">{formatPeriodLabel(period, budget.periodicity, locale)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-foreground">
+                          {formatPeriodLabel(period, budget.periodicity, locale)}
+                        </span>
                         <PeriodStatusBadge status={period.status} />
                       </div>
                     ) : (
                       <span className="text-[11px] text-muted-foreground">Not started</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{money(s ? s.allocated : budget.allocatedAmount)}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{s ? money(s.spent) : '—'}</td>
-                  <td className={cn('px-4 py-3 text-right font-mono font-semibold tabular-nums', s && s.remaining < 0 && 'text-destructive')}>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                    {money(s ? s.allocated : budget.allocatedAmount)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums text-foreground">
+                    {s ? money(s.spent) : '—'}
+                  </td>
+                  <td
+                    className={cn(
+                      'px-4 py-3 text-right font-mono font-semibold tabular-nums',
+                      s && s.remaining < 0 ? 'text-destructive' : 'text-foreground',
+                    )}
+                  >
                     {s ? money(s.remaining) : '—'}
                   </td>
-                  <td className="px-4 py-3">{s ? <BudgetProgressBar summary={s} size="sm" /> : <span className="text-muted-foreground">—</span>}</td>
-                  <td className="px-4 py-3"><BudgetHealthBadge health={getBudgetHealth(budget)} /></td>
+                  <td className="px-4 py-3">
+                    {s ? <BudgetProgressBar summary={s} size="sm" /> : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <BudgetHealthBadge health={getBudgetHealth(budget)} />
+                  </td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => onEdit(budget)} aria-label={`Edit ${budget.name}`} className="h-7 w-7 p-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEdit(budget)}
+                        aria-label={`Edit ${budget.name}`}
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     </td>
@@ -86,6 +133,6 @@ export const BudgetsTable: React.FC<BudgetsTableProps> = ({ budgets, categoriesB
           </tbody>
         </table>
       </div>
-    </Card>
+    </div>
   )
 }

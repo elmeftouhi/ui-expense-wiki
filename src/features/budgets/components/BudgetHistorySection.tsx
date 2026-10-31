@@ -1,10 +1,11 @@
 import React, { useId, useState } from 'react'
-import { AlertCircle, CalendarRange, RefreshCw, ShieldAlert } from 'lucide-react'
+import { AlertCircle, RefreshCw, ShieldAlert } from 'lucide-react'
 import { ApiClientError } from '@/api/client'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useMediaQuery } from '@/lib/useMediaQuery'
 import { cn } from '@/lib/utils'
 import { useBudgetHistory } from '../hooks/useBudgets'
 import { BUDGET_HISTORY_MONTHS, isValidMonthsBack } from '../services/budgetService'
@@ -29,6 +30,7 @@ export const BudgetHistorySection: React.FC<BudgetHistorySectionProps> = ({ budg
   const [customError, setCustomError] = useState<string | null>(null)
   const selectId = useId()
   const customId = useId()
+  const isDesktop = useMediaQuery('(min-width: 768px)', true)
 
   const history = useBudgetHistory(budgetId, monthsBack)
   const money = (n: number) => formatCurrency(n, { currency, locale })
@@ -67,19 +69,12 @@ export const BudgetHistorySection: React.FC<BudgetHistorySectionProps> = ({ budg
   const isBadRange = history.error instanceof ApiClientError && history.error.status === 400
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 space-y-0 p-5 pb-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <CalendarRange className="h-4 w-4 text-primary" /> History
-          </CardTitle>
-          <CardDescription className="mt-1 text-xs">
-            Month-by-month totals. Spent includes paid expenses only.
-          </CardDescription>
-        </div>
+    <Card className="border-border/80 shadow-xs">
+      <CardHeader className="flex flex-col gap-2.5 space-y-0 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <CardTitle className="text-sm font-semibold">History</CardTitle>
         <div className="flex flex-wrap items-start gap-2">
           <div className="flex items-center gap-2">
-            <label htmlFor={selectId} className="text-[11px] font-semibold text-muted-foreground">
+            <label htmlFor={selectId} className="text-[11px] font-medium text-muted-foreground">
               Months back
             </label>
             <select
@@ -89,7 +84,9 @@ export const BudgetHistorySection: React.FC<BudgetHistorySectionProps> = ({ budg
               className={cn(fieldInputClass, 'h-8 w-auto pr-7')}
             >
               {HISTORY_PRESETS.map((n) => (
-                <option key={n} value={n}>{n} months</option>
+                <option key={n} value={n}>
+                  {n} months
+                </option>
               ))}
               <option value={CUSTOM}>Custom…</option>
             </select>
@@ -97,7 +94,9 @@ export const BudgetHistorySection: React.FC<BudgetHistorySectionProps> = ({ budg
           {isCustom && (
             <form onSubmit={applyCustom} noValidate className="flex flex-col gap-1">
               <div className="flex items-center gap-1.5">
-                <label htmlFor={customId} className="sr-only">Custom months back</label>
+                <label htmlFor={customId} className="sr-only">
+                  Custom months back
+                </label>
                 <input
                   id={customId}
                   type="number"
@@ -111,10 +110,16 @@ export const BudgetHistorySection: React.FC<BudgetHistorySectionProps> = ({ budg
                   aria-describedby={customError ? `${customId}-error` : undefined}
                   className={cn(fieldInputClass, 'h-8 w-20 font-mono tabular-nums', customError && fieldInvalidClass)}
                 />
-                <Button type="submit" variant="outline" size="sm" className="h-8 text-xs">Apply</Button>
+                <Button type="submit" variant="outline" size="sm" className="h-8 text-xs">
+                  Apply
+                </Button>
               </div>
               {customError && (
-                <p id={`${customId}-error`} role="alert" className="flex items-center gap-1 text-[11px] font-medium text-destructive">
+                <p
+                  id={`${customId}-error`}
+                  role="alert"
+                  className="flex items-center gap-1 text-[11px] font-medium text-destructive"
+                >
                   <AlertCircle className="h-3 w-3 shrink-0" /> {customError}
                 </p>
               )}
@@ -126,21 +131,23 @@ export const BudgetHistorySection: React.FC<BudgetHistorySectionProps> = ({ budg
             onClick={() => void history.refetch()}
             disabled={history.isFetching}
             aria-label="Refresh history"
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', history.isFetching && 'animate-spin')} />
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="border-t border-border/60 p-0">
         {history.isLoading ? (
-          <div className="space-y-2 p-5" aria-busy="true" aria-label="Loading history" data-testid="history-loading">
-            {Array.from({ length: 4 }, (_, i) => <div key={i} className="h-9 animate-pulse rounded-lg bg-muted" />)}
+          <div className="space-y-2 p-4 sm:p-5" aria-busy="true" aria-label="Loading history" data-testid="history-loading">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="h-9 animate-pulse rounded-lg bg-muted" />
+            ))}
           </div>
         ) : isBadRange ? (
           <div role="alert" className="flex flex-col items-center gap-2 px-6 py-10 text-center text-xs">
             <AlertCircle className="h-6 w-6 text-amber-500" />
-            <p className="font-semibold text-foreground">That history range isn't supported</p>
+            <p className="font-semibold text-foreground">That history range isn&apos;t supported</p>
             <p className="text-muted-foreground">
               Choose between {BUDGET_HISTORY_MONTHS.min} and {BUDGET_HISTORY_MONTHS.max} months.
             </p>
@@ -157,22 +164,54 @@ export const BudgetHistorySection: React.FC<BudgetHistorySectionProps> = ({ budg
             </Button>
           </div>
         ) : !history.data || history.data.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <CalendarRange className="h-5 w-5" />
-            </div>
-            <p className="text-sm font-semibold text-foreground">No history for this range</p>
-            <p className="max-w-md text-xs text-muted-foreground">
-              No budget periods were found in the last {monthsBack} {monthsBack === 1 ? 'month' : 'months'}.
+          <div className="px-6 py-8 text-center">
+            <p className="text-xs font-semibold text-foreground">No history for this range</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              No periods in the last {monthsBack} {monthsBack === 1 ? 'month' : 'months'}.
             </p>
           </div>
-        ) : (
+        ) : isDesktop ? (
           <HistoryTable rows={history.data} money={money} locale={locale} />
+        ) : (
+          <HistoryMobileList rows={history.data} money={money} locale={locale} />
         )}
       </CardContent>
     </Card>
   )
 }
+
+const HistoryMobileList: React.FC<{
+  rows: BudgetPeriodResponse[]
+  money: (n: number) => string
+  locale?: string
+}> = ({ rows, money, locale }) => (
+  <ul className="divide-y divide-border/60" aria-label="Budget history">
+    {rows.map((row) => {
+      const remaining = row.allocatedAmount - row.spentAmount
+      return (
+        <li key={row.id} className="space-y-1.5 p-4 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-foreground">{formatHistoryPeriodLabel(row, locale)}</span>
+            <PeriodStatusBadge status={row.status} />
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span
+              className={cn(
+                'font-mono font-semibold tabular-nums',
+                remaining < 0 ? 'text-destructive' : 'text-foreground',
+              )}
+            >
+              {money(remaining)} <span className="font-sans text-[11px] font-normal text-muted-foreground">left</span>
+            </span>
+            <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+              {money(row.spentAmount)} / {money(row.allocatedAmount)}
+            </span>
+          </div>
+        </li>
+      )
+    })}
+  </ul>
+)
 
 const HistoryTable: React.FC<{
   rows: BudgetPeriodResponse[]
@@ -180,9 +219,9 @@ const HistoryTable: React.FC<{
   locale?: string
 }> = ({ rows, money, locale }) => (
   <div className="custom-scrollbar overflow-x-auto">
-    <table className="w-full min-w-[640px] text-xs" aria-label="Budget history">
-      <thead>
-        <tr className="border-b border-border/60 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <table className="w-full min-w-[600px] text-xs" aria-label="Budget history">
+      <thead className="border-b border-border/60 bg-muted/25">
+        <tr className="text-left text-[11px] font-medium text-muted-foreground">
           <th scope="col" className="px-4 py-2.5">Period</th>
           <th scope="col" className="px-4 py-2.5 text-right">Allocated</th>
           <th scope="col" className="px-4 py-2.5 text-right">Spent</th>
@@ -191,24 +230,37 @@ const HistoryTable: React.FC<{
           <th scope="col" className="px-4 py-2.5 text-right">Warning threshold</th>
         </tr>
       </thead>
-      <tbody>
-        {/* Rows are rendered in API order (startDate desc). */}
+      <tbody className="divide-y divide-border/50">
         {rows.map((row) => {
           const remaining = row.allocatedAmount - row.spentAmount
           return (
-            <tr key={row.id} className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/40">
+            <tr key={row.id} className="transition-colors hover:bg-muted/25">
               <td className="px-4 py-3">
                 <div className="font-semibold text-foreground">{formatHistoryPeriodLabel(row, locale)}</div>
-                <div className="text-[10px] text-muted-foreground">{formatDateRange(row, locale)}</div>
+                <div className="text-[11px] text-muted-foreground">{formatDateRange(row, locale)}</div>
               </td>
-              <td className="px-4 py-3 text-right font-mono tabular-nums">{money(row.allocatedAmount)}</td>
-              <td className={cn('px-4 py-3 text-right font-mono tabular-nums', row.spentAmount === 0 && 'text-muted-foreground')}>
+              <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                {money(row.allocatedAmount)}
+              </td>
+              <td
+                className={cn(
+                  'px-4 py-3 text-right font-mono tabular-nums',
+                  row.spentAmount === 0 ? 'text-muted-foreground' : 'text-foreground',
+                )}
+              >
                 {money(row.spentAmount)}
               </td>
-              <td className={cn('px-4 py-3 text-right font-mono font-semibold tabular-nums', remaining < 0 && 'text-destructive')}>
+              <td
+                className={cn(
+                  'px-4 py-3 text-right font-mono font-semibold tabular-nums',
+                  remaining < 0 ? 'text-destructive' : 'text-foreground',
+                )}
+              >
                 {money(remaining)}
               </td>
-              <td className="px-4 py-3"><PeriodStatusBadge status={row.status} /></td>
+              <td className="px-4 py-3">
+                <PeriodStatusBadge status={row.status} />
+              </td>
               <td className="px-4 py-3 text-right font-mono tabular-nums text-muted-foreground">
                 {formatWarningThreshold(row.warningType, row.warningThreshold, money)}
               </td>

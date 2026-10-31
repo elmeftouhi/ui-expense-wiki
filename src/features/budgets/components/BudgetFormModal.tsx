@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { AlertCircle, Info, Loader2, PiggyBank, Save } from 'lucide-react'
+import { AlertCircle, Info, Loader2, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -51,7 +51,7 @@ function toFormValues(budget: Budget): BudgetFormValues {
   }
 }
 
-const describedBy = (id: string, hasError: boolean, hasHint = true) =>
+const describedBy = (id: string, hasError: boolean, hasHint = false) =>
   hasError ? `${id}-error` : hasHint ? `${id}-hint` : undefined
 
 const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
@@ -80,9 +80,9 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
     mode: 'onTouched',
   })
 
-  const [warningType, allocatedAmount, warningThreshold, periodicity] = useWatch({
+  const [warningType, allocatedAmount, warningThreshold] = useWatch({
     control,
-    name: ['warningType', 'allocatedAmount', 'warningThreshold', 'periodicity'],
+    name: ['warningType', 'allocatedAmount', 'warningThreshold'],
   })
 
   const previewWarningAt =
@@ -104,19 +104,16 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
 
   return (
     <BudgetDialog
-      title={isEditing ? 'Edit budget' : 'Create budget'}
-      description={
-        isEditing
-          ? 'Changes update the budget definition used for new period instances.'
-          : 'Define a spending cap for one or more categories. Spend is tracked automatically.'
-      }
-      icon={<PiggyBank className="h-5 w-5" />}
+      title={isEditing ? 'Edit budget' : 'New budget'}
       onClose={onClose}
       dismissible={!isSubmitting}
-      className="max-w-xl"
+      className="sm:max-w-xl"
     >
       {serverError && (
-        <div role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive"
+        >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{serverError}</span>
         </div>
@@ -129,25 +126,20 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
             type="text"
             autoFocus
             maxLength={BUDGET_NAME_MAX}
-            placeholder="e.g. Cloud & SaaS spend"
+            placeholder="e.g. Cloud & SaaS"
             aria-invalid={!!errors.name || undefined}
-            aria-describedby={describedBy('budget-name', !!errors.name, false)}
+            aria-describedby={describedBy('budget-name', !!errors.name)}
             className={cn(fieldInputClass, errors.name && fieldInvalidClass)}
             {...register('name')}
           />
         </FormField>
 
-        <FormField
-          label="Description"
-          htmlFor="budget-description"
-          hint="Optional. What does this budget cover?"
-          error={errors.description?.message}
-        >
+        <FormField label="Description" htmlFor="budget-description" error={errors.description?.message}>
           <textarea
             id="budget-description"
             rows={2}
             maxLength={BUDGET_DESCRIPTION_MAX}
-            placeholder="Scope, owner, or approval notes…"
+            placeholder="Optional notes…"
             aria-invalid={!!errors.description || undefined}
             aria-describedby={describedBy('budget-description', !!errors.description)}
             className={cn(fieldInputClass, 'h-auto resize-none py-2', errors.description && fieldInvalidClass)}
@@ -155,13 +147,8 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
           />
         </FormField>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            label="Periodicity"
-            htmlFor="budget-periodicity"
-            required
-            hint={`A new ${PERIODICITY_LABELS[periodicity].toLowerCase()} period starts with the first matching expense.`}
-          >
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <FormField label="Periodicity" htmlFor="budget-periodicity" required>
             <select id="budget-periodicity" className={fieldInputClass} {...register('periodicity')}>
               {PERIODICITIES.map((p) => (
                 <option key={p} value={p}>
@@ -175,7 +162,6 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
             label="Allocated amount"
             htmlFor="budget-allocated"
             required
-            hint="Default cap for each period."
             error={errors.allocatedAmount?.message}
           >
             <AmountInput
@@ -190,8 +176,8 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
           </FormField>
         </div>
 
-        <div className="space-y-3 rounded-xl border border-border/60 bg-muted/30 p-3.5">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2.5 rounded-xl border border-border/60 bg-muted/25 p-3">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             <FormField label="Warning type" htmlFor="budget-warning-type">
               <Controller
                 control={control}
@@ -212,7 +198,6 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
               htmlFor="budget-warning-threshold"
               required
               error={errors.warningThreshold?.message}
-              hint={warningType === 'PERCENTAGE' ? 'Between 0 and 100.' : 'Warn when spending reaches this amount.'}
             >
               <AmountInput
                 id="budget-warning-threshold"
@@ -226,10 +211,8 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
             </FormField>
           </div>
           {previewWarningAt !== null && !errors.warningThreshold && (
-            <p data-testid="warning-preview" className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Info className="h-3 w-3 text-primary" />
-              You'll be warned once a period's spend reaches{' '}
-              <span className="font-semibold text-foreground">{money(previewWarningAt)}</span>.
+            <p data-testid="warning-preview" className="text-[11px] text-muted-foreground">
+              Warns at <span className="font-mono font-semibold text-foreground">{money(previewWarningAt)}</span> spent
             </p>
           )}
         </div>
@@ -248,7 +231,6 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
           htmlFor="budget-categories"
           required
           error={errors.categoryIds?.message}
-          hint="Expenses in these categories are deducted automatically. A category can belong to multiple budgets — the expense counts toward each one."
         >
           <Controller
             control={control}
@@ -272,11 +254,9 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
         </FormField>
 
         {isEditing && (
-          <p className="flex items-start gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] p-2.5 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Existing period instances keep their own allocation and warning rule. Use “Adjust period” on the
-            budget details page to change them. Newly added categories only link older expenses if the matching
-            period already exists.
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Info className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+            <span>Defaults apply to future periods. Adjust the active period from the budget details page.</span>
           </p>
         )}
 
@@ -284,12 +264,12 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
           control={control}
           name="active"
           render={({ field }) => (
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 px-3 py-2.5">
               <div>
                 <p id="budget-active-label" className="text-xs font-semibold text-foreground">
                   Active
                 </p>
-                <p className="text-[11px] text-muted-foreground">Inactive budgets stop tracking new expenses.</p>
+                <p className="text-[11px] text-muted-foreground">Pause to stop tracking new expenses</p>
               </div>
               <button
                 type="button"
@@ -317,7 +297,12 @@ const BudgetFormInner: React.FC<Omit<BudgetFormModalProps, 'isOpen'>> = ({
           <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isSubmitting} className="h-9">
             Cancel
           </Button>
-          <Button type="submit" size="sm" disabled={isSubmitting || categoriesLoading || !!categoriesError} className="h-9 gap-1.5">
+          <Button
+            type="submit"
+            size="sm"
+            disabled={isSubmitting || categoriesLoading || !!categoriesError}
+            className="h-9 gap-1.5"
+          >
             {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {isEditing ? 'Save changes' : 'Create budget'}
           </Button>

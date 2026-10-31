@@ -55,7 +55,15 @@ export function ExpensesPage() {
   const [filters, setFilters] = useState<ExpenseListFilters>(() => parseExpenseSearchParams(searchParams))
   const [search, setSearch] = useState(() => parseExpenseSearchParams(searchParams).search ?? '')
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
-  const [selectedParentIds, setSelectedParentIds] = useState<number[]>([])
+  const [selectedParentIds, setSelectedParentIds] = useState<number[]>(() => {
+    const rawParents = searchParams.get('parents')
+    return rawParents
+      ? rawParents
+          .split(',')
+          .map((part) => Number(part.trim()))
+          .filter((id) => Number.isSafeInteger(id) && id > 0)
+      : []
+  })
   const lastSyncedSearchRef = useRef(searchParams.toString())
 
   const resetFilters = useCallback(() => {
@@ -76,18 +84,30 @@ export function ExpensesPage() {
     if (incoming === lastSyncedSearchRef.current) return
     lastSyncedSearchRef.current = incoming
     const parsed = parseExpenseSearchParams(searchParams)
+    const rawParents = searchParams.get('parents')
     setFilters(parsed)
     setSearch(parsed.search ?? '')
+    setSelectedParentIds(
+      rawParents
+        ? rawParents
+            .split(',')
+            .map((part) => Number(part.trim()))
+            .filter((id) => Number.isSafeInteger(id) && id > 0)
+        : [],
+    )
   }, [searchParams])
 
   // Sync internal filter changes out to URL search params
   useEffect(() => {
     const nextParams = buildExpenseUrlSearchParams(filters)
+    if (selectedParentIds.length > 0 && filters.categoryIds?.length) {
+      nextParams.set('parents', selectedParentIds.join(','))
+    }
     const nextStr = nextParams.toString()
     if (nextStr === lastSyncedSearchRef.current) return
     lastSyncedSearchRef.current = nextStr
     setSearchParams(nextParams, { replace: true })
-  }, [filters, setSearchParams])
+  }, [filters, selectedParentIds, setSearchParams])
 
   // Lock body scroll when mobile filter bottom sheet is open
   useEffect(() => {
@@ -497,8 +517,27 @@ export function ExpensesPage() {
                             type="button"
                             aria-label={`Remove ${name}`}
                             onClick={() => {
-                              const nextIds = filters.categoryIds?.filter((selectedId) => selectedId !== id)
-                              updateFilter('categoryIds', nextIds?.length ? nextIds : undefined)
+                              const rawNext = (filters.categoryIds ?? []).filter((selectedId) => selectedId !== id)
+                              // Prune any selected parent whose descendants have all been removed
+                              const keptParents = selectedParentIds.filter((parentId) => {
+                                const pIdx = categories.options.findIndex((o) => o.id === parentId)
+                                if (pIdx === -1) return false
+                                for (
+                                  let next = pIdx + 1;
+                                  next < categories.options.length && categories.options[next].depth > categories.options[pIdx].depth;
+                                  next++
+                                ) {
+                                  const childId = categories.options[next].id
+                                  if (rawNext.includes(childId) && !selectedParentIds.includes(childId)) {
+                                    return true
+                                  }
+                                }
+                                return false
+                              })
+                              const prunedParents = selectedParentIds.filter((p) => !keptParents.includes(p))
+                              const finalIds = rawNext.filter((cid) => !prunedParents.includes(cid))
+                              setSelectedParentIds(keptParents)
+                              updateFilter('categoryIds', finalIds.length ? finalIds : undefined)
                             }}
                             className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                           >

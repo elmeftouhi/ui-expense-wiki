@@ -15,12 +15,11 @@ interface BudgetDialogProps {
 }
 
 /**
- * Modal shell matching the existing app dialogs, with keyboard focus kept inside the dialog.
+ * Responsive modal shell: bottom-anchored sheet on mobile (< 640px) and centered modal on desktop.
  */
 export const BudgetDialog: React.FC<BudgetDialogProps> = ({
   title,
   description,
-  icon,
   onClose,
   children,
   className,
@@ -45,7 +44,8 @@ export const BudgetDialog: React.FC<BudgetDialogProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-xs sm:items-center sm:bg-background/80 sm:p-4 sm:backdrop-blur-sm"
+      onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => {
         if (dismissible && e.target === e.currentTarget) onClose()
       }}
@@ -82,30 +82,31 @@ export const BudgetDialog: React.FC<BudgetDialogProps> = ({
           }
         }}
         className={cn(
-          'dialog-enter custom-scrollbar max-h-[92vh] w-full max-w-lg space-y-5 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl',
+          'dialog-enter custom-scrollbar max-h-[90vh] w-full space-y-4 overflow-y-auto rounded-t-2xl border border-border bg-card p-5 pb-6 text-card-foreground shadow-2xl sm:max-w-lg sm:rounded-xl sm:p-5 sm:shadow-xl',
           className,
         )}
       >
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-1 h-1 w-10 rounded-full bg-muted-foreground/25 sm:hidden"
+        />
         <div className="flex items-start justify-between gap-3 border-b border-border/60 pb-3">
-          <div className="flex items-start gap-2.5">
-            {icon && <div className="rounded-xl bg-primary/10 p-2 text-primary">{icon}</div>}
-            <div>
-              <h2 id={titleId} className="text-base font-bold text-foreground">
-                {title}
-              </h2>
-              {description && (
-                <p id={descriptionId} className="mt-0.5 text-xs text-muted-foreground">
-                  {description}
-                </p>
-              )}
-            </div>
+          <div>
+            <h2 id={titleId} className="text-base font-semibold text-foreground">
+              {title}
+            </h2>
+            {description && (
+              <p id={descriptionId} className="mt-0.5 text-xs text-muted-foreground">
+                {description}
+              </p>
+            )}
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={!dismissible}
             aria-label="Close dialog"
-            className="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
           >
             <X className="h-4 w-4" />
           </button>

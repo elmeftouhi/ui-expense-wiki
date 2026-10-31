@@ -3,23 +3,19 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   BellRing,
-  CalendarClock,
   CircleDashed,
-  History,
   Pencil,
   RefreshCw,
   SearchX,
   ShieldAlert,
   SlidersHorizontal,
-  Tags,
 } from 'lucide-react'
 import { useActiveTenant } from '@/features/tenants'
 import { ApiClientError } from '@/api/client'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
-import { formatCurrency, formatDate } from '@/lib/formatters'
+import { formatCurrency } from '@/lib/formatters'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { cn } from '@/lib/utils'
 import type { BudgetCreateRequest, BudgetPeriod, BudgetPeriodUpdateRequest } from '../types'
@@ -27,9 +23,9 @@ import { useBudget, useBudgetPeriods, useUpdateBudget, useUpdateBudgetPeriod } f
 import { useCategoryOptions } from '../hooks/useCategoryOptions'
 import {
   PERIODICITY_LABELS,
-  describeWarningRule,
   formatDateRange,
   formatPeriodLabel,
+  formatWarningThreshold,
   getBudgetHealth,
   summarizePeriod,
 } from '../utils/budgetMath'
@@ -39,13 +35,12 @@ import { BudgetCategoryChips } from '../components/BudgetCategoryChips'
 import { BudgetFormModal } from '../components/BudgetFormModal'
 import { PeriodEditModal } from '../components/PeriodEditModal'
 import { PeriodHistoryTable } from '../components/PeriodHistoryTable'
-import { BudgetHelpPanel } from '../components/BudgetHelpPanel'
 import { BudgetHistorySection } from '../components/BudgetHistorySection'
 
 const BackLink: React.FC = () => (
-  <Button asChild variant="ghost" size="sm" className="-ml-2 h-8 gap-1.5 text-xs text-muted-foreground">
+  <Button asChild variant="ghost" size="sm" className="-ml-2 h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground">
     <Link to="/budgets">
-      <ArrowLeft className="h-3.5 w-3.5" /> All budgets
+      <ArrowLeft className="h-3.5 w-3.5" /> Budgets
     </Link>
   </Button>
 )
@@ -83,10 +78,10 @@ const BudgetDetailsContent: React.FC = () => {
         <BackLink />
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-            <SearchX className="h-8 w-8 text-muted-foreground" />
+            <SearchX className="h-7 w-7 text-muted-foreground" />
             <h1 className="text-base font-semibold text-foreground">Budget not found</h1>
-            <p className="max-w-sm text-xs text-muted-foreground">
-              It may have been removed or belongs to a different workspace than <strong>{activeTenant.name}</strong>.
+            <p className="max-w-xs text-xs text-muted-foreground">
+              This budget may have been removed or belongs to another workspace.
             </p>
           </CardContent>
         </Card>
@@ -96,14 +91,11 @@ const BudgetDetailsContent: React.FC = () => {
 
   if (budgetQuery.isLoading) {
     return (
-      <div className="space-y-6" aria-busy="true" aria-label="Loading budget">
+      <div className="space-y-5" aria-busy="true" aria-label="Loading budget">
         <BackLink />
-        <div className="h-8 w-64 animate-pulse rounded-lg bg-muted" />
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="h-56 animate-pulse rounded-xl bg-muted lg:col-span-2" />
-          <div className="h-56 animate-pulse rounded-xl bg-muted" />
-        </div>
-        <div className="h-64 animate-pulse rounded-xl bg-muted" />
+        <div className="h-7 w-56 animate-pulse rounded-lg bg-muted" />
+        <div className="h-44 animate-pulse rounded-xl bg-muted" />
+        <div className="h-56 animate-pulse rounded-xl bg-muted" />
       </div>
     )
   }
@@ -114,8 +106,8 @@ const BudgetDetailsContent: React.FC = () => {
         <BackLink />
         <Card className="border-destructive/30">
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <ShieldAlert className="h-8 w-8 text-destructive" />
-            <h1 className="text-sm font-semibold text-foreground">Couldn't load this budget</h1>
+            <ShieldAlert className="h-7 w-7 text-destructive" />
+            <h1 className="text-sm font-semibold text-foreground">Couldn&apos;t load this budget</h1>
             <p className="text-xs text-muted-foreground">{getApiErrorMessage(budgetQuery.error)}</p>
             <Button variant="outline" size="sm" onClick={() => void budgetQuery.refetch()} className="gap-1.5 text-xs">
               <RefreshCw className="h-3.5 w-3.5" /> Try again
@@ -144,7 +136,10 @@ const BudgetDetailsContent: React.FC = () => {
   const handlePeriodSubmit = async (periodId: number, payload: BudgetPeriodUpdateRequest) => {
     try {
       const updated = await updatePeriod.mutateAsync({ periodId, payload })
-      toast.success('Period updated', `${formatPeriodLabel(updated, budget.periodicity, activeTenant.locale)} now has ${money(updated.allocatedAmount)} allocated.`)
+      toast.success(
+        'Period updated',
+        `${formatPeriodLabel(updated, budget.periodicity, activeTenant.locale)} now has ${money(updated.allocatedAmount)} allocated.`,
+      )
     } catch (err) {
       toast.error('Could not update period', getApiErrorMessage(err))
       throw err
@@ -152,150 +147,166 @@ const BudgetDetailsContent: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="space-y-2 border-b border-border/40 pb-3">
+      <div className="space-y-1.5">
         <BackLink />
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{budget.name}</h1>
+              <h1 className="truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                {budget.name}
+              </h1>
               <BudgetHealthBadge health={health} />
-              <Badge variant="outline" className="text-[10px]">{PERIODICITY_LABELS[budget.periodicity]}</Badge>
-              <Badge variant={budget.active ? 'success' : 'secondary'} className="text-[10px]">
-                {budget.active ? 'Active' : 'Inactive'}
-              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {PERIODICITY_LABELS[budget.periodicity]}
+                {!budget.active && ' · Inactive'}
+              </span>
             </div>
-            {budget.description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{budget.description}</p>}
+            {budget.description && (
+              <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">{budget.description}</p>
+            )}
           </div>
+
           {canEdit && (
             <div className="flex shrink-0 items-center gap-2">
               {current && (
-                <Button variant="outline" size="sm" onClick={() => setAdjustingPeriod(current)} className="h-9 gap-1.5 text-xs">
-                  <SlidersHorizontal className="h-3.5 w-3.5" /> Adjust current period
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAdjustingPeriod(current)}
+                  className="h-8 gap-1.5 text-xs sm:h-9"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  Adjust current period
                 </Button>
               )}
-              <Button size="sm" onClick={() => setIsEditOpen(true)} className="h-9 gap-1.5 text-xs">
-                <Pencil className="h-3.5 w-3.5" /> Edit budget
+              <Button size="sm" onClick={() => setIsEditOpen(true)} className="h-8 gap-1.5 text-xs sm:h-9">
+                <Pencil className="h-3.5 w-3.5" />
+                Edit budget
               </Button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        {/* Current period */}
-        <Card className="relative overflow-hidden lg:col-span-2">
-          <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
-          <CardHeader className="p-5 pb-3">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <CalendarClock className="h-4 w-4 text-primary" /> Current period
-              </CardTitle>
+      {/* Unified Ledger Sheet: Current Period + Defaults */}
+      <section className="overflow-hidden rounded-xl border border-border/80 bg-card text-card-foreground shadow-xs">
+        <div className="divide-y divide-border/60 lg:grid lg:grid-cols-12 lg:divide-x lg:divide-y-0">
+          {/* Current Period (8 cols) */}
+          <div className="space-y-4 p-4 sm:p-5 lg:col-span-8">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {current
+                    ? `${formatPeriodLabel(current, budget.periodicity, activeTenant.locale)} · ${formatDateRange(current, activeTenant.locale)}`
+                    : 'Current period'}
+                </span>
+              </div>
               {current && <PeriodStatusBadge status={current.status} />}
             </div>
-            {current && (
-              <CardDescription className="text-xs">
-                {formatPeriodLabel(current, budget.periodicity, activeTenant.locale)} · {formatDateRange(current, activeTenant.locale)}
-              </CardDescription>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-5 px-5 pb-5">
+
             {current && summary ? (
               <>
-                <div className="flex flex-wrap items-end justify-between gap-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remaining</p>
-                    <p className={cn('font-mono text-3xl font-bold tabular-nums tracking-tight', summary.remaining < 0 ? 'text-destructive' : 'text-foreground')}>
+                    <span className="block text-[11px] text-muted-foreground">Remaining</span>
+                    <span
+                      className={cn(
+                        'font-mono text-2xl font-bold tabular-nums tracking-tight sm:text-3xl',
+                        summary.remaining < 0 ? 'text-destructive' : 'text-foreground',
+                      )}
+                    >
                       {money(summary.remaining)}
-                    </p>
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
                     {Number.isFinite(summary.consumedPercent) ? `${summary.consumedPercent.toFixed(1)}%` : '—'} used
-                  </p>
+                  </span>
                 </div>
+
                 <BudgetProgressBar summary={summary} />
-                <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {[
-                    ['Allocated', money(summary.allocated)],
-                    ['Spent (paid)', money(summary.spent)],
-                    ['Warns at', money(summary.warningAt)],
-                    ['Last updated', formatDate(current.updatedAt ?? current.createdAt, { locale: activeTenant.locale })],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-lg border border-border/60 bg-background/60 p-3">
-                      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</dt>
-                      <dd className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-foreground">{value}</dd>
-                    </div>
-                  ))}
+
+                <dl className="grid grid-cols-3 divide-x divide-border/60 border-t border-border/60 pt-3">
+                  <div className="pr-3">
+                    <dt className="text-[11px] text-muted-foreground">Allocated</dt>
+                    <dd className="mt-0.5 font-mono text-xs font-semibold tabular-nums text-foreground sm:text-sm">
+                      {money(summary.allocated)}
+                    </dd>
+                  </div>
+                  <div className="px-3">
+                    <dt className="text-[11px] text-muted-foreground">Spent (paid)</dt>
+                    <dd className="mt-0.5 font-mono text-xs font-semibold tabular-nums text-foreground sm:text-sm">
+                      {money(summary.spent)}
+                    </dd>
+                  </div>
+                  <div className="pl-3">
+                    <dt className="text-[11px] text-muted-foreground">Warns at</dt>
+                    <dd className="mt-0.5 font-mono text-xs font-semibold tabular-nums text-foreground sm:text-sm">
+                      {money(summary.warningAt)}
+                    </dd>
+                  </div>
                 </dl>
+
                 {(current.warningSent || current.exceededSent) && (
                   <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <BellRing className="h-3.5 w-3.5 text-amber-500" />
-                    {current.exceededSent ? 'Exceeded notification sent for this period.' : 'Warning notification sent for this period.'}
+                    {current.exceededSent
+                      ? 'Exceeded alert sent for this period.'
+                      : 'Warning alert sent for this period.'}
                   </p>
                 )}
               </>
             ) : (
-              <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">
-                <CircleDashed className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-                <div className="space-y-1 text-xs text-muted-foreground">
-                  <p className="font-semibold text-foreground">No current period instance yet</p>
-                  <p>
-                    The current {PERIODICITY_LABELS[budget.periodicity].toLowerCase()} period will be created automatically when the
-                    first expense in one of the tracked categories is recorded. It will start with{' '}
-                    <span className="font-mono font-semibold text-foreground">{money(budget.allocatedAmount)}</span> allocated.
+              <div className="flex items-start gap-2.5 rounded-lg border border-dashed border-border/80 bg-muted/25 p-3.5 text-xs text-muted-foreground">
+                <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-foreground">No current period yet</p>
+                  <p className="mt-0.5">
+                    Starts automatically on the first paid expense with{' '}
+                    <span className="font-mono font-semibold text-foreground">{money(budget.allocatedAmount)}</span>{' '}
+                    allocated.
                   </p>
-                  <p>Expenses recorded before the period exists are not linked retroactively.</p>
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Configuration */}
-        <Card>
-          <CardHeader className="p-5 pb-3">
-            <CardTitle className="text-sm">Budget defaults</CardTitle>
-            <CardDescription className="text-xs">Applied to each new period instance.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 px-5 pb-5 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Allocation per period</span>
-              <span className="font-mono font-semibold text-foreground">{money(budget.allocatedAmount)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Warning</span>
-              <span className="text-right font-medium text-foreground">
-                {describeWarningRule(budget.warningType, budget.warningThreshold, money)}
-              </span>
-            </div>
-            <div className="space-y-2 border-t border-border/50 pt-3">
-              <p className="flex items-center gap-1.5 font-semibold text-foreground">
-                <Tags className="h-3.5 w-3.5 text-primary" /> Tracked categories ({budget.categoryIds.length})
-              </p>
-              <BudgetCategoryChips categoryIds={budget.categoryIds} categoriesById={categories.byId} />
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                These categories may also belong to other budgets — matching expenses are deducted from each. Matching is
-                exact: subcategories are only counted when tracked themselves, and only paid expenses count as spent.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <BudgetHistorySection budgetId={budget.id} currency={activeTenant.currency} locale={activeTenant.locale} />
-
-      {/* Period history */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 p-5 pb-3">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <History className="h-4 w-4 text-primary" /> Period history
-            </CardTitle>
-            <CardDescription className="mt-1 text-xs">
-              Spend (paid expenses only) is recalculated automatically when expenses are updated, paid or deleted.
-            </CardDescription>
           </div>
+
+          {/* Defaults & Tracked Categories (4 cols) */}
+          <div className="space-y-3.5 p-4 text-xs sm:p-5 lg:col-span-4">
+            <h2 className="text-xs font-semibold text-foreground">Defaults</h2>
+            <dl className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">Default cap</dt>
+                <dd className="font-mono font-semibold tabular-nums text-foreground">
+                  {money(budget.allocatedAmount)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">Warning rule</dt>
+                <dd className="font-mono font-medium tabular-nums text-foreground">
+                  {formatWarningThreshold(budget.warningType, budget.warningThreshold, money)}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="space-y-2 border-t border-border/60 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-muted-foreground">Categories</span>
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {budget.categoryIds.length}
+                </span>
+              </div>
+              <BudgetCategoryChips categoryIds={budget.categoryIds} categoriesById={categories.byId} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Period History */}
+      <Card className="border-border/80 shadow-xs">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-4 py-3.5 sm:px-5">
+          <CardTitle className="text-sm font-semibold">Periods</CardTitle>
           <Button
             variant="ghost"
             size="sm"
@@ -305,20 +316,29 @@ const BudgetDetailsContent: React.FC = () => {
             }}
             disabled={budgetQuery.isFetching || periodsQuery.isFetching}
             aria-label="Refresh periods"
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
           >
-            <RefreshCw className={cn('h-3.5 w-3.5', (budgetQuery.isFetching || periodsQuery.isFetching) && 'animate-spin')} />
+            <RefreshCw
+              className={cn(
+                'h-3.5 w-3.5',
+                (budgetQuery.isFetching || periodsQuery.isFetching) && 'animate-spin',
+              )}
+            />
           </Button>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="border-t border-border/60 p-0">
           {periodsQuery.isLoading ? (
-            <div className="space-y-2 p-5" aria-busy="true">
-              {Array.from({ length: 3 }, (_, i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />)}
+            <div className="space-y-2 p-4 sm:p-5" aria-busy="true">
+              {Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />
+              ))}
             </div>
           ) : periodsQuery.isError ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center text-xs">
               <p className="text-destructive">{getApiErrorMessage(periodsQuery.error, 'Failed to load periods.')}</p>
-              <Button variant="outline" size="sm" onClick={() => void periodsQuery.refetch()} className="text-xs">Retry</Button>
+              <Button variant="outline" size="sm" onClick={() => void periodsQuery.refetch()} className="text-xs">
+                Retry
+              </Button>
             </div>
           ) : (
             <PeriodHistoryTable
@@ -334,7 +354,7 @@ const BudgetDetailsContent: React.FC = () => {
         </CardContent>
       </Card>
 
-      <BudgetHelpPanel />
+      <BudgetHistorySection budgetId={budget.id} currency={activeTenant.currency} locale={activeTenant.locale} />
 
       <BudgetFormModal
         isOpen={isEditOpen}
