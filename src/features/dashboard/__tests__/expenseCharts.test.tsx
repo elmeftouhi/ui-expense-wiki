@@ -9,8 +9,15 @@ import { SpendingTrendChart } from '../components/SpendingTrendChart'
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  BarChart: ({ data }: { data: unknown[] }) => <div data-testid="chart-data">{JSON.stringify(data)}</div>,
-  Bar: () => null,
+  BarChart: ({ data, children }: { data: unknown[]; children: React.ReactNode }) => (
+    <div>
+      <div data-testid="chart-data">{JSON.stringify(data)}</div>
+      {children}
+    </div>
+  ),
+  Bar: ({ dataKey, name }: { dataKey: string; name?: string }) => (
+    <span data-testid="chart-bar" data-key={dataKey} data-name={name} />
+  ),
   XAxis: () => null,
   YAxis: () => null,
   CartesianGrid: () => null,
@@ -81,7 +88,7 @@ describe('expense chart service', () => {
 })
 
 describe('live spending chart', () => {
-  it('loads the current period, keeps zero days, calculates summaries, and navigates months and years', async () => {
+  it('loads daily current-month data without previous-month series and keeps comparison only on Monthly Totals', async () => {
     const user = userEvent.setup()
     const now = new Date()
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue(daily)
@@ -91,12 +98,19 @@ describe('live spending chart', () => {
     const points = JSON.parse(chart.textContent!)
     expect(points).toHaveLength(31)
     expect(points.slice(0, 3)).toMatchObject([
-      { day: 1, total: 4.8, previousTotal: 12 },
-      { day: 2, total: 0, previousTotal: 0 },
-      { day: 3, total: 246.99, previousTotal: 50 },
+      { day: 1, total: 4.8 },
+      { day: 2, total: 0 },
+      { day: 3, total: 246.99 },
     ])
-    expect(points[29]).toMatchObject({ day: 30, total: 0, previousTotal: 7 })
-    expect(points[30]).toMatchObject({ day: 31, total: 0, previousTotal: 0 })
+    expect(points[0]).not.toHaveProperty('previousTotal')
+    expect(points[29]).toMatchObject({ day: 30, total: 0 })
+    expect(points[30]).toMatchObject({ day: 31, total: 0 })
+
+    // Only a single series bar is rendered on Daily view
+    const dailyBars = screen.getAllByTestId('chart-bar')
+    expect(dailyBars).toHaveLength(1)
+    expect(dailyBars[0]).toHaveAttribute('data-key', 'total')
+
     expect(screen.getByText('$251.79')).toBeInTheDocument()
     expect(screen.getByText('$83.93')).toBeInTheDocument()
     expect(get).toHaveBeenLastCalledWith('/v1/expenses/charts/daily', expect.objectContaining({
@@ -117,6 +131,11 @@ describe('live spending chart', () => {
       { month: 'January', shortMonth: 'Jan', amount: 0, previousYearAmount: 0 },
       { month: 'October', shortMonth: 'Oct', amount: 1169.68, previousYearAmount: 125 },
     ])
+
+    // Monthly Totals retains the comparison series bar
+    const monthlyBars = screen.getAllByTestId('chart-bar')
+    expect(monthlyBars.map((el) => el.getAttribute('data-key'))).toEqual(['amount', 'previousYearAmount'])
+
     expect(get).toHaveBeenLastCalledWith('/v1/expenses/charts/monthly', expect.objectContaining({
       params: { year: now.getFullYear() },
     }))
@@ -138,10 +157,10 @@ describe('live spending chart', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('renders empty responses explicitly but retains all-zero periods as real chart data', async () => {
+  it('renders empty responses explicitly even if previousMonthTotals is populated', async () => {
     const user = userEvent.setup()
     vi.spyOn(apiClient, 'get')
-      .mockResolvedValueOnce({ ...daily, totals: [], previousMonthTotals: [] })
+      .mockResolvedValueOnce({ ...daily, totals: [], previousMonthTotals: [{ day: 1, total: 99 }] })
       .mockResolvedValue({ ...monthly, totals: [{ month: 1, total: 0 }], previousYearTotals: [{ month: 1, total: 0 }] })
     renderChart()
     await screen.findByText('No spending data for this period.')
@@ -150,16 +169,17 @@ describe('live spending chart', () => {
     expect(screen.queryByText('No spending data for this period.')).not.toBeInTheDocument()
   })
 
-  it('sizes the daily axis to the current month length and keeps previous-only data visible', async () => {
+  it('sizes the daily axis to the selected month length', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue({
-      year: 2026, month: 2, totals: [],
+      year: 2026, month: 2, totals: [{ day: 14, total: 42 }],
       previousMonthTotals: [{ day: 28, total: 9 }, { day: 31, total: 99 }],
     })
     renderChart()
     const points = JSON.parse((await screen.findByTestId('chart-data')).textContent!)
     expect(points).toHaveLength(28)
-    expect(points[27]).toMatchObject({ day: 28, total: 0, previousTotal: 9 })
-    expect(points.every((p: { total: number }) => p.total === 0)).toBe(true)
+    expect(points[13]).toMatchObject({ day: 14, total: 42 })
+    expect(points[27]).toMatchObject({ day: 28, total: 0 })
+    expect(points[27]).not.toHaveProperty('previousTotal')
   })
 
   it('isolates tenants and refreshes chart data after expense invalidation', async () => {

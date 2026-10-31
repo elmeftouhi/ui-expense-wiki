@@ -18,17 +18,26 @@ import { cn } from '@/lib/utils'
 import { MetricsOverview } from '../components/MetricsOverview'
 import { SpendingTrendChart } from '../components/SpendingTrendChart'
 import { CategoryBreakdownCard } from '../components/CategoryBreakdownCard'
+import { RecentExpensesCard } from '../components/RecentExpensesCard'
 import { useDashboardSummary } from '../hooks/useDashboardSummary'
 import { BudgetConsumptionWidget } from '@/features/budgets'
-import { useExpenseStatistics } from '@/features/expenses'
+import { useExpenses, useExpenseStatistics, type ExpenseListFilters } from '@/features/expenses'
 import { currentMonthStatisticsRange } from '@/features/expenses/utils/statisticsRange'
 
 type MobileDashboardSection = 'trends' | 'categories' | 'budgets'
+
+const RECENT_EXPENSES_FILTERS: ExpenseListFilters = {
+  page: 0,
+  size: 5,
+  sort: 'createdAt',
+  direction: 'desc',
+}
 
 export const DashboardPage: React.FC = () => {
   const { activeTenant, canEdit } = useActiveTenant()
   const summary = useDashboardSummary(activeTenant.id)
   const statistics = useExpenseStatistics(currentMonthStatisticsRange())
+  const recentExpenses = useExpenses(RECENT_EXPENSES_FILTERS)
   const isCompactLayout = useMediaQuery('(max-width: 1023px)', false)
   const [mobileSection, setMobileSection] = useState<MobileDashboardSection>('trends')
   const [moreActionsOpen, setMoreActionsOpen] = useState(false)
@@ -49,11 +58,12 @@ export const DashboardPage: React.FC = () => {
     }
   }, [moreActionsOpen])
 
-  const isRefreshing = summary.isRefreshing || statistics.isFetching
+  const isRefreshing = summary.isRefreshing || statistics.isFetching || recentExpenses.isFetching
   const refresh = () => {
     if (isRefreshing) return
     summary.refresh()
     void statistics.refetch({ cancelRefetch: false })
+    void recentExpenses.refetch({ cancelRefetch: false })
   }
 
   return (
@@ -177,7 +187,7 @@ export const DashboardPage: React.FC = () => {
 
       {/* Analytics & Breakdowns: Mobile Segmented Switcher (< lg) vs 3-Column Grid (lg+) */}
       {isCompactLayout ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div
             role="tablist"
             aria-label="Dashboard sections"
@@ -258,12 +268,35 @@ export const DashboardPage: React.FC = () => {
               />
             )}
           </div>
+
+          {/* Last 5 Expenses directly below the chart / active panel */}
+          <RecentExpensesCard
+            pageData={recentExpenses.data}
+            isLoading={recentExpenses.isLoading}
+            error={recentExpenses.error}
+            onRetry={() => void recentExpenses.refetch({ cancelRefetch: false })}
+            isFetching={recentExpenses.isFetching}
+            canEdit={canEdit}
+            currency={activeTenant.currency}
+            locale={activeTenant.locale}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-5">
             <SpendingTrendChart
               tenantId={activeTenant.id}
+              currency={activeTenant.currency}
+              locale={activeTenant.locale}
+            />
+
+            <RecentExpensesCard
+              pageData={recentExpenses.data}
+              isLoading={recentExpenses.isLoading}
+              error={recentExpenses.error}
+              onRetry={() => void recentExpenses.refetch({ cancelRefetch: false })}
+              isFetching={recentExpenses.isFetching}
+              canEdit={canEdit}
               currency={activeTenant.currency}
               locale={activeTenant.locale}
             />

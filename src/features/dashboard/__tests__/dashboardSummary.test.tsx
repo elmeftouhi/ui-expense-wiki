@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,8 +7,8 @@ import { apiClient, ApiClientError } from '@/api/client'
 import { fetchDashboardSummary } from '../services/dashboardService'
 import { DashboardPage } from '../pages/DashboardPage'
 import type { DashboardSummary } from '../types'
-import { expenseService } from '@/features/expenses'
-import { expenseStatistics } from '@/features/expenses/__tests__/expenseFixtures'
+import { expenseService, type ExpensePageResponse } from '@/features/expenses'
+import { expense, expenseStatistics } from '@/features/expenses/__tests__/expenseFixtures'
 
 vi.mock('@/features/tenants', () => ({
   useActiveTenant: () => ({
@@ -32,10 +32,25 @@ const summary: DashboardSummary = {
   monthlyBudget: { totalBudget: 5000, usedPercentage: 62.4, totalRemaining: 1880 },
 }
 
+const recentExpensesPage: ExpensePageResponse = {
+  content: [
+    { ...expense, id: 101, description: 'Figma Team Seat', categoryName: 'SaaS', amount: 45, status: 'PAID' },
+    { ...expense, id: 102, description: 'Airport Taxi', categoryName: 'Transit', amount: 38.5, status: 'PENDING' },
+    { ...expense, id: 103, description: 'AWS Production', categoryName: 'Cloud', amount: 210, status: 'PAID' },
+    { ...expense, id: 104, description: 'Office Coffee', categoryName: 'Pantry', amount: 24, status: 'PAID' },
+    { ...expense, id: 105, description: 'Domain Renewal', categoryName: 'SaaS', amount: 16, status: 'PENDING' },
+  ],
+  page: 0,
+  size: 5,
+  totalElements: 18,
+  totalPages: 4,
+}
+
 let client: QueryClient
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   vi.spyOn(expenseService, 'statistics').mockResolvedValue(expenseStatistics)
+  vi.spyOn(expenseService, 'list').mockResolvedValue(recentExpensesPage)
 })
 afterEach(() => {
   cleanup()
@@ -120,6 +135,7 @@ describe('DashboardPage summary', () => {
     await user.click(busy)
     expect(get).toHaveBeenCalledTimes(2)
     expect(expenseService.statistics).toHaveBeenCalledTimes(2)
+    expect(expenseService.list).toHaveBeenCalledTimes(2)
 
     resolveRefresh({ ...summary, monthExpenses: { ...summary.monthExpenses, currentTotal: 1500 } })
     expect(await screen.findByText('$1,500.00')).toBeInTheDocument()
@@ -139,6 +155,46 @@ describe('DashboardPage summary', () => {
     expect(await screen.findByText('$1,200.00')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
     expect(get).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('DashboardPage recent expenses', () => {
+  it('fetches and displays the last 5 added expenses under the chart', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(summary)
+    renderPage()
+
+    expect(expenseService.list).toHaveBeenCalledWith({
+      page: 0,
+      size: 5,
+      sort: 'createdAt',
+      direction: 'desc',
+    })
+
+    const list = await screen.findByRole('list', { name: 'Recent expenses' })
+    const items = within(list).getAllByRole('listitem')
+    expect(items).toHaveLength(5)
+    expect(within(items[0]).getByText('Figma Team Seat')).toBeInTheDocument()
+    expect(within(items[0]).getByText('$45.00')).toBeInTheDocument()
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/expenses/101')
+    expect(within(items[4]).getByText('Domain Renewal')).toBeInTheDocument()
+    expect(screen.getByText('5 of 18 expenses')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /all expenses/i })).toHaveAttribute(
+      'href',
+      '/expenses?sort=createdAt&direction=desc',
+    )
+  })
+
+  it('shows empty state and retries non-blocking errors for recent expenses', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(summary)
+    vi.mocked(expenseService.list)
+      .mockRejectedValueOnce(new Error('Recent expenses failed'))
+      .mockResolvedValueOnce({ ...recentExpensesPage, content: [], totalElements: 0, totalPages: 0 })
+
+    renderPage()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Recent expenses failed')
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry recent expenses' }))
+    expect(await screen.findByText('No expenses recorded yet.')).toBeInTheDocument()
   })
 })
 
@@ -170,7 +226,7 @@ describe('DashboardPage category spending', () => {
     vi.mocked(expenseService.statistics).mockReturnValue(new Promise(() => {}))
     renderPage()
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading category spending...')
+    expect(screen.getByText('Loading category spending...')).toHaveAttribute('role', 'status')
     expect(screen.queryByText(/spending categories$/)).not.toBeInTheDocument()
     await screen.findByText('$1,200.00')
   })
@@ -234,20 +290,21 @@ describe('DashboardPage category spending', () => {
     renderPage()
 
     expect(await screen.findByText('Housing')).toBeInTheDocument()
-    expect(screen.getByText('Other (2)')).toBeInTheDocument()
-    expect(screen.queryByText('Travel')).not.toBeInTheDocument()
+    const categoryList = screen.getByRole('list', { name: 'Category spending' })
+    expect(within(categoryList).getByText('Other (2)')).toBeInTheDocument()
+    expect(within(categoryList).queryByText('Travel')).not.toBeInTheDocument()
     expect(screen.getByText('6 spending categories')).toBeInTheDocument()
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: /show all 6 categories/i }))
-    expect(screen.getByText('Travel')).toBeInTheDocument()
-    expect(screen.getByText('Office')).toBeInTheDocument()
-    expect(screen.queryByText('Other (2)')).not.toBeInTheDocument()
+    expect(within(categoryList).getByText('Travel')).toBeInTheDocument()
+    expect(within(categoryList).getByText('Office')).toBeInTheDocument()
+    expect(within(categoryList).queryByText('Other (2)')).not.toBeInTheDocument()
   })
 })
 
 describe('DashboardPage compact mobile layout', () => {
-  it('replaces stacked widgets with a segmented tab switcher on small screens', async () => {
+  it('replaces stacked widgets with a segmented tab switcher on small screens while keeping recent expenses below', async () => {
     const originalMatchMedia = window.matchMedia
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === '(max-width: 1023px)',
@@ -270,9 +327,10 @@ describe('DashboardPage compact mobile layout', () => {
       await screen.findByText('$1,200.00')
       expect(screen.getByTestId('overdue-count')).toHaveTextContent('All settled')
 
-      // Only the active mobile section is mounted at a time
+      // Only the active mobile section is mounted at a time, and Recent expenses stays visible underneath
       expect(screen.getByRole('tablist', { name: 'Dashboard sections' })).toBeInTheDocument()
       expect(screen.getByTestId('trends-widget')).toBeInTheDocument()
+      expect(await screen.findByText('Figma Team Seat')).toBeInTheDocument()
       expect(screen.queryByText('Utilities')).not.toBeInTheDocument()
       expect(screen.queryByTestId('budgets-widget')).not.toBeInTheDocument()
 
