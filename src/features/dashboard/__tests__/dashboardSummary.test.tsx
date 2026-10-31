@@ -16,8 +16,12 @@ vi.mock('@/features/tenants', () => ({
     canEdit: false,
   }),
 }))
-vi.mock('@/features/budgets', () => ({ BudgetConsumptionWidget: () => null }))
-vi.mock('../components/SpendingTrendChart', () => ({ SpendingTrendChart: () => null }))
+vi.mock('@/features/budgets', () => ({
+  BudgetConsumptionWidget: () => <div data-testid="budgets-widget" />,
+}))
+vi.mock('../components/SpendingTrendChart', () => ({
+  SpendingTrendChart: () => <div data-testid="trends-widget" />,
+}))
 
 const summary: DashboardSummary = {
   monthExpenses: { currentTotal: 1200, previousTotal: 1000, percentageChange: 20 },
@@ -211,5 +215,77 @@ describe('DashboardPage category spending', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /^refresh$/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent('showing last loaded values')
     expect(screen.getByText('$935.00')).toBeInTheDocument()
+  })
+
+  it('caps category rows to top 4 with an Other summary and expands on demand', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(summary)
+    vi.mocked(expenseService.statistics).mockResolvedValue({
+      ...expenseStatistics,
+      totalExpenses: 1000,
+      byCategory: [
+        { categoryId: 1, categoryName: 'Housing', total: 400, parentTotal: null, subCategories: [] },
+        { categoryId: 2, categoryName: 'Utilities', total: 250, parentTotal: null, subCategories: [] },
+        { categoryId: 3, categoryName: 'Food', total: 150, parentTotal: null, subCategories: [] },
+        { categoryId: 4, categoryName: 'Software', total: 100, parentTotal: null, subCategories: [] },
+        { categoryId: 5, categoryName: 'Travel', total: 60, parentTotal: null, subCategories: [] },
+        { categoryId: 6, categoryName: 'Office', total: 40, parentTotal: null, subCategories: [] },
+      ],
+    })
+    renderPage()
+
+    expect(await screen.findByText('Housing')).toBeInTheDocument()
+    expect(screen.getByText('Other (2)')).toBeInTheDocument()
+    expect(screen.queryByText('Travel')).not.toBeInTheDocument()
+    expect(screen.getByText('6 spending categories')).toBeInTheDocument()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /show all 6 categories/i }))
+    expect(screen.getByText('Travel')).toBeInTheDocument()
+    expect(screen.getByText('Office')).toBeInTheDocument()
+    expect(screen.queryByText('Other (2)')).not.toBeInTheDocument()
+  })
+})
+
+describe('DashboardPage compact mobile layout', () => {
+  it('replaces stacked widgets with a segmented tab switcher on small screens', async () => {
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 1023px)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+
+    try {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...summary,
+        overdue: { totalAmount: 0, count: 0 },
+      })
+      renderPage()
+
+      await screen.findByText('$1,200.00')
+      expect(screen.getByTestId('overdue-count')).toHaveTextContent('All settled')
+
+      // Only the active mobile section is mounted at a time
+      expect(screen.getByRole('tablist', { name: 'Dashboard sections' })).toBeInTheDocument()
+      expect(screen.getByTestId('trends-widget')).toBeInTheDocument()
+      expect(screen.queryByText('Utilities')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('budgets-widget')).not.toBeInTheDocument()
+
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('tab', { name: /categories/i }))
+      expect(await screen.findByText('Utilities')).toBeInTheDocument()
+      expect(screen.queryByTestId('trends-widget')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('tab', { name: /budgets/i }))
+      expect(screen.getByTestId('budgets-widget')).toBeInTheDocument()
+      expect(screen.queryByText('Utilities')).not.toBeInTheDocument()
+    } finally {
+      window.matchMedia = originalMatchMedia
+    }
   })
 })
