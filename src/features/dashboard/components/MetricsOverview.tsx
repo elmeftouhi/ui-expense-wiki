@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   TrendingUp,
@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  ChevronDown,
 } from 'lucide-react'
 import type { DashboardPeriodTotals, DashboardSummary } from '../types'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +31,8 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
   currency,
   locale,
 }) => {
+  const [showMobileDetails, setShowMobileDetails] = useState(false)
+
   const money = (value: number | undefined) =>
     value === undefined ? EMPTY : formatCurrency(value, { currency, locale })
 
@@ -259,8 +262,31 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
           </div>
         </div>
 
+        {/* Mobile Toggle for Secondary Metrics */}
+        <div className="sm:hidden border-t border-border/60 bg-muted/15">
+          <button
+            type="button"
+            onClick={() => setShowMobileDetails((prev) => !prev)}
+            className="w-full py-2 px-4 flex items-center justify-between text-xs text-muted-foreground hover:text-foreground font-medium transition-colors"
+            aria-expanded={showMobileDetails}
+          >
+            <span>{showMobileDetails ? 'Hide additional metrics' : 'More summary details (Upcoming & YTD)'}</span>
+            <ChevronDown
+              className={cn(
+                'w-3.5 h-3.5 transition-transform duration-200',
+                showMobileDetails && 'rotate-180',
+              )}
+            />
+          </button>
+        </div>
+
         {/* Secondary Compact 2-Column Split: Upcoming & Year-to-Date */}
-        <div className="grid grid-cols-2 divide-x divide-border/60 border-t border-border/60">
+        <div
+          className={cn(
+            'grid grid-cols-2 divide-x divide-border/60 border-t border-border/60',
+            !showMobileDetails && 'hidden sm:grid',
+          )}
+        >
           {/* Upcoming This Month */}
           <Link
             to="/expenses?status=PENDING"
@@ -310,7 +336,11 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
         </div>
 
         {/* Quiet Payables Footer Strip when zero overdue items */}
-        {overdueCount === 0 && payablesStrip('bottom')}
+        {overdueCount === 0 && (
+          <div className={cn(!showMobileDetails && 'hidden sm:block')}>
+            {payablesStrip('bottom')}
+          </div>
+        )}
       </div>
     </section>
   )

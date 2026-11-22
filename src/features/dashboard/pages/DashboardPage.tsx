@@ -8,6 +8,7 @@ import {
   BarChart3,
   PieChart,
   TrendingUp,
+  ArrowRight,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useActiveTenant } from '@/features/tenants'
@@ -188,88 +189,7 @@ export const DashboardPage: React.FC = () => {
       {/* Analytics & Breakdowns: Mobile Segmented Switcher (< lg) vs 3-Column Grid (lg+) */}
       {isCompactLayout ? (
         <div className="space-y-4">
-          <div
-            role="tablist"
-            aria-label="Dashboard sections"
-            className="grid grid-cols-3 p-1 rounded-xl bg-muted/60 border border-border/60 text-xs"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobileSection === 'trends'}
-              onClick={() => setMobileSection('trends')}
-              className={cn(
-                'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition-all cursor-pointer',
-                mobileSection === 'trends'
-                  ? 'bg-background text-foreground shadow-xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-              <span>Trends</span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobileSection === 'categories'}
-              onClick={() => setMobileSection('categories')}
-              className={cn(
-                'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition-all cursor-pointer',
-                mobileSection === 'categories'
-                  ? 'bg-background text-foreground shadow-xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <PieChart className="w-3.5 h-3.5 shrink-0" />
-              <span>Categories</span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobileSection === 'budgets'}
-              onClick={() => setMobileSection('budgets')}
-              className={cn(
-                'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition-all cursor-pointer',
-                mobileSection === 'budgets'
-                  ? 'bg-background text-foreground shadow-xs font-semibold'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <PiggyBank className="w-3.5 h-3.5 shrink-0" />
-              <span>Budgets</span>
-            </button>
-          </div>
-
-          <div role="tabpanel">
-            {mobileSection === 'trends' && (
-              <SpendingTrendChart
-                tenantId={activeTenant.id}
-                currency={activeTenant.currency}
-                locale={activeTenant.locale}
-              />
-            )}
-            {mobileSection === 'categories' && (
-              <CategoryBreakdownCard
-                statistics={statistics.data}
-                isLoading={statistics.isLoading}
-                error={statistics.error}
-                onRetry={() => void statistics.refetch({ cancelRefetch: false })}
-                isFetching={statistics.isFetching}
-                currency={activeTenant.currency}
-                locale={activeTenant.locale}
-              />
-            )}
-            {mobileSection === 'budgets' && (
-              <BudgetConsumptionWidget
-                currency={activeTenant.currency}
-                locale={activeTenant.locale}
-              />
-            )}
-          </div>
-
-          {/* Last 5 Expenses directly below the chart / active panel */}
+          {/* Last 5 Expenses brought upfront on mobile for immediate glance */}
           <RecentExpensesCard
             pageData={recentExpenses.data}
             isLoading={recentExpenses.isLoading}
@@ -280,6 +200,103 @@ export const DashboardPage: React.FC = () => {
             currency={activeTenant.currency}
             locale={activeTenant.locale}
           />
+
+          {/* Analytics & Breakdown Section */}
+          <div className="pt-1 space-y-3">
+            <div className="flex items-center justify-between px-0.5">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Trends & Insights
+              </span>
+              <Link
+                to="/expenses/statistics"
+                className="text-[11px] font-medium text-primary hover:underline inline-flex items-center gap-1"
+              >
+                <span>Full statistics</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+
+            <div
+              role="tablist"
+              aria-label="Dashboard sections"
+              className="grid grid-cols-3 p-1 rounded-xl bg-muted/60 border border-border/60 text-xs"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileSection === 'trends'}
+                onClick={() => setMobileSection('trends')}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition-all cursor-pointer',
+                  mobileSection === 'trends'
+                    ? 'bg-background text-foreground shadow-xs font-semibold'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                <span>Trends</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileSection === 'categories'}
+                onClick={() => setMobileSection('categories')}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition-all cursor-pointer',
+                  mobileSection === 'categories'
+                    ? 'bg-background text-foreground shadow-xs font-semibold'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <PieChart className="w-3.5 h-3.5 shrink-0" />
+                <span>Categories</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileSection === 'budgets'}
+                onClick={() => setMobileSection('budgets')}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition-all cursor-pointer',
+                  mobileSection === 'budgets'
+                    ? 'bg-background text-foreground shadow-xs font-semibold'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <PiggyBank className="w-3.5 h-3.5 shrink-0" />
+                <span>Budgets</span>
+              </button>
+            </div>
+
+            <div role="tabpanel">
+              {mobileSection === 'trends' && (
+                <SpendingTrendChart
+                  tenantId={activeTenant.id}
+                  currency={activeTenant.currency}
+                  locale={activeTenant.locale}
+                />
+              )}
+              {mobileSection === 'categories' && (
+                <CategoryBreakdownCard
+                  statistics={statistics.data}
+                  isLoading={statistics.isLoading}
+                  error={statistics.error}
+                  onRetry={() => void statistics.refetch({ cancelRefetch: false })}
+                  isFetching={statistics.isFetching}
+                  currency={activeTenant.currency}
+                  locale={activeTenant.locale}
+                />
+              )}
+              {mobileSection === 'budgets' && (
+                <BudgetConsumptionWidget
+                  currency={activeTenant.currency}
+                  locale={activeTenant.locale}
+                />
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
