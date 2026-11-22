@@ -130,12 +130,14 @@ function ExpenseFormContent() {
         }
       }
     } catch (error) {
-      if (!isEditing && (isDuplicateExpenseWarning(error) || parseDuplicateWarning(error))) {
-        const warning = isDuplicateExpenseWarning(error)
-          ? error.warning
-          : parseDuplicateWarning(error)!
+      const duplicate = isDuplicateExpenseWarning(error)
+        ? error.warning
+        : parseDuplicateWarning(error)
+
+      if (duplicate) {
+        setServerError(null)
         setDuplicateWarning({
-          warning,
+          warning: duplicate,
           payload,
           addNew,
           categoryName,
@@ -164,6 +166,9 @@ function ExpenseFormContent() {
     const payloadWithConfirmation: ExpenseUpsertRequest = {
       ...duplicateWarning.payload,
       confirmDuplicate: true,
+      saveAnyway: true,
+      force: true,
+      confirm: true,
       [confirmationField]: true,
     }
 
@@ -293,6 +298,15 @@ function ExpenseFormContent() {
       {duplicateWarning && (
         <DuplicateExpenseDialog
           matchingExpense={duplicateWarning.warning.matchingExpense}
+          submittedExpense={{
+            amount: duplicateWarning.payload.amount,
+            dueDate: duplicateWarning.payload.dueDate,
+            paidDate: duplicateWarning.payload.paidDate,
+            categoryName: duplicateWarning.categoryName,
+            description: duplicateWarning.payload.description,
+            notes: duplicateWarning.payload.notes,
+            paymentMethodName: paymentMethods.data?.find((m) => m.id === duplicateWarning.payload.paymentMethodId)?.name,
+          }}
           message={duplicateWarning.warning.message}
           isSubmitting={isConfirmingDuplicate}
           categoryFallbackName={duplicateWarning.categoryName}

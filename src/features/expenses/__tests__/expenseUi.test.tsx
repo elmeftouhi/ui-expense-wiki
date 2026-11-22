@@ -247,18 +247,18 @@ describe('expense UI', () => {
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Possible duplicate expense')).toBeInTheDocument()
+    expect(within(dialog).getByRole('heading', { name: /expense already exists/i })).toBeInTheDocument()
     expect(within(dialog).getByText('$25.00')).toBeInTheDocument()
     expect(within(dialog).getByText('Groceries')).toBeInTheDocument()
     expect(within(dialog).getByText('Weekly groceries')).toBeInTheDocument()
     expect(within(dialog).getByText('paid')).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Edit / cancel' })).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Add anyway' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /cancel|edit/i })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: /save anyway|add anyway/i })).toBeInTheDocument()
 
     expect(screen.getByRole('spinbutton', { name: /Amount/ })).toHaveValue(25)
     expect(screen.getByLabelText(/Description/)).toHaveValue('Weekly groceries')
 
-    await user.click(within(dialog).getByRole('button', { name: 'Edit / cancel' }))
+    await user.click(within(dialog).getByRole('button', { name: /cancel|edit/i }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Category' })).toHaveTextContent('Groceries')
@@ -266,7 +266,7 @@ describe('expense UI', () => {
     expect(screen.getByLabelText(/Description/)).toHaveValue('Weekly groceries')
   })
 
-  it('confirms duplicate warning with "Add anyway", resubmits with confirmation field, and creates expense', async () => {
+  it('confirms duplicate warning with "Save anyway", resubmits with confirmation field, and creates expense', async () => {
     const warningError = new DuplicateExpenseWarningError({
       isDuplicate: true,
       message: 'Possible match found.',
@@ -299,9 +299,9 @@ describe('expense UI', () => {
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Possible duplicate expense')).toBeInTheDocument()
+    expect(within(dialog).getByRole('heading', { name: /expense already exists/i })).toBeInTheDocument()
 
-    await user.click(within(dialog).getByRole('button', { name: 'Add anyway' }))
+    await user.click(within(dialog).getByRole('button', { name: /save anyway|add anyway/i }))
 
     await waitFor(() => {
       expect(mocks.createExpense).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -313,6 +313,47 @@ describe('expense UI', () => {
 
     expect(await screen.findByText('Saved expense 88')).toBeInTheDocument()
     expect(mocks.success).toHaveBeenCalledWith('Expense recorded.')
+  })
+
+  it('displays a popup when API error message says expense already exists and lets user save anyway', async () => {
+    mocks.createExpense.mockRejectedValueOnce(new Error('Expense already exists in this tenant'))
+    mocks.createExpense.mockResolvedValueOnce({ ...expense, id: 999 })
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/expenses/new']}>
+        <Routes>
+          <Route path="/expenses/new" element={<ExpenseFormPage />} />
+          <Route path="/expenses/:expenseId" element={<p>Saved expense 999</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Groceries' }))
+    await user.type(screen.getByRole('spinbutton', { name: /Amount/ }), '42')
+    await user.click(screen.getByRole('button', { name: 'Record expense' }))
+
+    // A popup MUST appear, not just a static error alert banner
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: /expense already exists/i })).toBeInTheDocument()
+    expect(within(dialog).getByText('$42.00')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Groceries').length).toBeGreaterThan(0)
+
+    // Gives user choice to save anyway
+    const saveAnywayBtn = within(dialog).getByRole('button', { name: /save anyway|add anyway/i })
+    expect(saveAnywayBtn).toBeInTheDocument()
+
+    await user.click(saveAnywayBtn)
+    await waitFor(() => {
+      expect(mocks.createExpense).toHaveBeenLastCalledWith(expect.objectContaining({
+        categoryId: 4,
+        amount: 42,
+        confirmDuplicate: true,
+      }))
+    })
+    expect(await screen.findByText('Saved expense 999')).toBeInTheDocument()
   })
 
   it('prevents accidental double clicks on form submission', async () => {
@@ -341,7 +382,7 @@ describe('expense UI', () => {
     await act(async () => { resolveSave(expense) })
   })
 
-  it('prevents accidental double clicks on "Add anyway" in duplicate dialog', async () => {
+  it('prevents accidental double clicks on "Save anyway" in duplicate dialog', async () => {
     const warningError = new DuplicateExpenseWarningError({
       isDuplicate: true,
       message: 'Possible match found.',
@@ -374,10 +415,10 @@ describe('expense UI', () => {
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
 
     const dialog = await screen.findByRole('dialog')
-    const addAnywayBtn = within(dialog).getByRole('button', { name: 'Add anyway' })
+    const saveAnywayBtn = within(dialog).getByRole('button', { name: /save anyway|add anyway/i })
 
-    await user.click(addAnywayBtn)
-    await user.click(addAnywayBtn)
+    await user.click(saveAnywayBtn)
+    await user.click(saveAnywayBtn)
 
     expect(mocks.createExpense).toHaveBeenCalledTimes(2)
     await act(async () => { resolveResubmit(expense) })

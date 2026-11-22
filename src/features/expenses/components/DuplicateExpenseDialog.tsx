@@ -7,8 +7,20 @@ import { formatDate, formatTenantCurrency } from '@/lib/formatters'
 import { useActiveTenant } from '@/features/tenants'
 import type { DuplicateExpenseDetails, ExpenseStatus } from '../types'
 
+export interface SubmittedExpenseDetails {
+  amount?: number
+  dueDate?: string
+  paidDate?: string | null
+  date?: string
+  categoryName?: string
+  description?: string
+  notes?: string | null
+  paymentMethodName?: string | null
+}
+
 export interface DuplicateExpenseDialogProps {
-  matchingExpense: DuplicateExpenseDetails
+  matchingExpense?: DuplicateExpenseDetails
+  submittedExpense?: SubmittedExpenseDetails
   message?: string
   isSubmitting?: boolean
   categoryFallbackName?: string
@@ -17,7 +29,8 @@ export interface DuplicateExpenseDialogProps {
 }
 
 export function DuplicateExpenseDialog({
-  matchingExpense,
+  matchingExpense = {},
+  submittedExpense,
   message,
   isSubmitting = false,
   categoryFallbackName,
@@ -27,13 +40,35 @@ export function DuplicateExpenseDialog({
   const { activeTenant } = useActiveTenant()
   const confirmClickedRef = useRef(false)
 
-  const amountDisplay = typeof matchingExpense.amount === 'number'
-    ? formatTenantCurrency(matchingExpense.amount, activeTenant)
+  const effectiveAmount = typeof matchingExpense.amount === 'number'
+    ? matchingExpense.amount
+    : submittedExpense?.amount
+
+  const amountDisplay = typeof effectiveAmount === 'number'
+    ? formatTenantCurrency(effectiveAmount, activeTenant)
     : undefined
 
-  const dateValue = matchingExpense.dueDate || matchingExpense.paidDate || matchingExpense.date
-  const categoryDisplay = matchingExpense.categoryName || categoryFallbackName || 'Category'
-  const paymentMethodDisplay = matchingExpense.paymentMethodName || matchingExpense.paymentMethod
+  const dateValue =
+    matchingExpense.dueDate ||
+    matchingExpense.paidDate ||
+    matchingExpense.date ||
+    submittedExpense?.dueDate ||
+    submittedExpense?.paidDate ||
+    submittedExpense?.date
+
+  const categoryDisplay =
+    matchingExpense.categoryName ||
+    categoryFallbackName ||
+    submittedExpense?.categoryName ||
+    'Selected category'
+
+  const paymentMethodDisplay =
+    matchingExpense.paymentMethodName ||
+    matchingExpense.paymentMethod ||
+    submittedExpense?.paymentMethodName
+
+  const descriptionDisplay = matchingExpense.description || submittedExpense?.description
+  const notesDisplay = matchingExpense.notes || submittedExpense?.notes
 
   const status = (matchingExpense.status && ['PENDING', 'PAID', 'OVERDUE', 'CANCELLED'].includes(matchingExpense.status))
     ? (matchingExpense.status as ExpenseStatus)
@@ -45,7 +80,6 @@ export function DuplicateExpenseDialog({
     try {
       void onConfirm()
     } finally {
-      // Release in next event cycle if not still unmounted
       setTimeout(() => {
         confirmClickedRef.current = false
       }, 500)
@@ -54,24 +88,24 @@ export function DuplicateExpenseDialog({
 
   return (
     <ExpenseDialog
-      title="Possible duplicate expense"
-      description={message || 'An existing expense with the same category, amount, and date was found in this workspace.'}
+      title="Expense already exists"
+      description={message || 'An expense with the same category, amount, and date already exists in this workspace.'}
       onClose={isSubmitting ? () => {} : onCancel}
     >
       <div className="space-y-4 pt-1">
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="space-y-1">
-            <p className="font-medium">Duplicate warning</p>
+            <p className="font-medium">Possible duplicate detected</p>
             <p className="text-xs text-muted-foreground">
-              Please review the matching expense below. You can edit or cancel your draft, or add this expense anyway.
+              A matching expense was found. You can review the details below, edit your draft, or choose to save anyway.
             </p>
           </div>
         </div>
 
         <div className="rounded-lg border border-border bg-muted/40 p-3.5 space-y-2.5 text-sm">
           <div className="flex items-center justify-between border-b border-border/60 pb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Matching expense</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Expense details</span>
             {status && <ExpenseStatusBadge status={status} compact />}
           </div>
 
@@ -111,19 +145,19 @@ export function DuplicateExpenseDialog({
             )}
           </div>
 
-          {matchingExpense.description && (
+          {descriptionDisplay && (
             <div className="border-t border-border/60 pt-2 space-y-0.5">
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <FileText className="h-3.5 w-3.5" /> Description
               </span>
-              <p className="text-foreground">{matchingExpense.description}</p>
+              <p className="text-foreground">{descriptionDisplay}</p>
             </div>
           )}
 
-          {matchingExpense.notes && (
+          {notesDisplay && (
             <div className="border-t border-border/60 pt-2 space-y-0.5">
               <span className="text-xs text-muted-foreground">Notes</span>
-              <p className="text-xs text-muted-foreground italic">{matchingExpense.notes}</p>
+              <p className="text-xs text-muted-foreground italic">{notesDisplay}</p>
             </div>
           )}
         </div>
@@ -135,7 +169,7 @@ export function DuplicateExpenseDialog({
             disabled={isSubmitting}
             onClick={onCancel}
           >
-            Edit / cancel
+            Cancel / Edit
           </Button>
           <Button
             type="button"
@@ -145,11 +179,10 @@ export function DuplicateExpenseDialog({
             className="gap-2"
           >
             {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            Add anyway
+            Save anyway
           </Button>
         </div>
       </div>
     </ExpenseDialog>
   )
 }
-

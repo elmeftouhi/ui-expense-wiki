@@ -202,7 +202,11 @@ describe('expense API service', () => {
 
     const created = await expenseService.create(payload)
     expect(created).toEqual(expense)
-    expect(post).toHaveBeenCalledWith('/v1/expenses', payload)
+    expect(post).toHaveBeenCalledWith(
+      '/v1/expenses',
+      payload,
+      expect.objectContaining({ params: expect.objectContaining({ confirmDuplicate: true }) }),
+    )
   })
 
   it('loads overdue and date-range statistics from their dedicated endpoints', async () => {

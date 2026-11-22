@@ -70,20 +70,39 @@ export const expenseService = {
   },
 
   async create(payload: ExpenseUpsertRequest): Promise<ExpenseResponse> {
+    const isConfirming = Boolean(payload.confirmDuplicate || payload.saveAnyway || payload.force || payload.confirm)
+    const confirmationField = typeof payload.confirmationField === 'string' ? payload.confirmationField : undefined
+    const options = isConfirming
+      ? {
+          params: {
+            confirmDuplicate: true,
+            saveAnyway: true,
+            force: true,
+            ...(confirmationField ? { [confirmationField]: true } : {}),
+          },
+        }
+      : undefined
+
     try {
-      const raw = await apiClient.post<unknown>(BASE, payload)
-      const warning = parseDuplicateWarning(raw)
-      if (warning) {
-        throw new DuplicateExpenseWarningError(warning)
+      const raw = isConfirming
+        ? await apiClient.post<unknown>(BASE, payload, options)
+        : await apiClient.post<unknown>(BASE, payload)
+      if (!isConfirming) {
+        const warning = parseDuplicateWarning(raw)
+        if (warning) {
+          throw new DuplicateExpenseWarningError(warning)
+        }
       }
       return parseResponse(expenseResponseSchema, raw)
     } catch (error) {
       if (error instanceof DuplicateExpenseWarningError) {
         throw error
       }
-      const warning = parseDuplicateWarning(error)
-      if (warning) {
-        throw new DuplicateExpenseWarningError(warning)
+      if (!isConfirming) {
+        const warning = parseDuplicateWarning(error)
+        if (warning) {
+          throw new DuplicateExpenseWarningError(warning)
+        }
       }
       throw error
     }
