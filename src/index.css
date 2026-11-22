@@ -122,6 +122,15 @@
     margin: 0;
   }
 
+  /* Prevent mobile browsers (e.g. iOS Safari) from auto-zooming on focus */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
   /* Sleek, unobtrusive scrollbars for independent scroll containers */
   .custom-scrollbar::-webkit-scrollbar {
     width: 5px;
