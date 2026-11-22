@@ -35,6 +35,37 @@ export interface ExpenseUpsertRequest {
   type?: ExpenseType
   paymentMethodId?: number | null
   notes?: string | null
+  confirmDuplicate?: boolean
+  [key: string]: unknown
+}
+
+export interface DuplicateExpenseDetails {
+  id?: number
+  categoryId?: number
+  categoryName?: string
+  userId?: number
+  amount?: number
+  currency?: string
+  date?: string
+  dueDate?: string
+  paidDate?: string | null
+  description?: string
+  type?: ExpenseType
+  status?: ExpenseStatus | string
+  paymentMethod?: string | null
+  paymentMethodId?: number | null
+  paymentMethodName?: string | null
+  notes?: string | null
+  createdAt?: string
+  updatedAt?: string
+  [key: string]: unknown
+}
+
+export interface DuplicateWarningResponse {
+  isDuplicate: true
+  message?: string
+  matchingExpense: DuplicateExpenseDetails
+  confirmationField?: string
 }
 
 export interface ExpenseStatusChangeRequest {

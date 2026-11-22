@@ -6,6 +6,7 @@ import {
   expenseResponseSchema,
   expenseStatisticsResponseSchema,
 } from '../schemas/expenseResponseSchema'
+import { DuplicateExpenseWarningError, parseDuplicateWarning } from '../utils/duplicateWarning'
 import type {
   ExpenseListFilters,
   ExpensePageResponse,
@@ -69,7 +70,23 @@ export const expenseService = {
   },
 
   async create(payload: ExpenseUpsertRequest): Promise<ExpenseResponse> {
-    return parseResponse(expenseResponseSchema, await apiClient.post<unknown>(BASE, payload))
+    try {
+      const raw = await apiClient.post<unknown>(BASE, payload)
+      const warning = parseDuplicateWarning(raw)
+      if (warning) {
+        throw new DuplicateExpenseWarningError(warning)
+      }
+      return parseResponse(expenseResponseSchema, raw)
+    } catch (error) {
+      if (error instanceof DuplicateExpenseWarningError) {
+        throw error
+      }
+      const warning = parseDuplicateWarning(error)
+      if (warning) {
+        throw new DuplicateExpenseWarningError(warning)
+      }
+      throw error
+    }
   },
 
   async update(id: number, payload: ExpenseUpsertRequest): Promise<ExpenseResponse> {

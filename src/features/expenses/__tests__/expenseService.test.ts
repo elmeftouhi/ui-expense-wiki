@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiClient } from '@/api/client'
+import { apiClient, ApiClientError } from '@/api/client'
 import { buildExpenseListParams, expenseService } from '../services/expenseService'
+import { DuplicateExpenseWarningError } from '../utils/duplicateWarning'
 import type { ExpenseListFilters } from '../types'
 import { expense, expenseStatistics } from './expenseFixtures'
 
@@ -124,6 +125,84 @@ describe('expense API service', () => {
     expect(del).toHaveBeenCalledWith('/v1/expenses/7')
     expect(patch).toHaveBeenNthCalledWith(1, '/v1/expenses/7/status', { status: 'PAID', paidDate: '2025-02-02' })
     expect(patch).toHaveBeenNthCalledWith(2, '/v1/expenses/7/mark-as-paid', undefined, { params: { paidDate: '2025-02-02' } })
+  })
+
+  it('detects duplicate warning from 409 ApiClientError and throws DuplicateExpenseWarningError', async () => {
+    vi.spyOn(apiClient, 'post').mockRejectedValue(
+      new ApiClientError('Conflict', 409, {
+        code: 'DUPLICATE_EXPENSE',
+        message: 'A duplicate expense exists.',
+        duplicateExpense: {
+          id: 42,
+          categoryId: 3,
+          categoryName: 'Utilities',
+          amount: 82.5,
+          dueDate: '2025-02-02',
+          description: 'Electricity bill',
+          status: 'PAID',
+        },
+        confirmationField: 'confirmDuplicate',
+      }),
+    )
+
+    const payload = { categoryId: 3, description: 'Electricity bill', amount: 82.5, dueDate: '2025-02-02' }
+    await expect(expenseService.create(payload)).rejects.toThrow(DuplicateExpenseWarningError)
+
+    try {
+      await expenseService.create(payload)
+    } catch (error) {
+      expect(error).toBeInstanceOf(DuplicateExpenseWarningError)
+      const warning = (error as DuplicateExpenseWarningError).warning
+      expect(warning.isDuplicate).toBe(true)
+      expect(warning.message).toBe('A duplicate expense exists.')
+      expect(warning.matchingExpense.id).toBe(42)
+      expect(warning.matchingExpense.amount).toBe(82.5)
+      expect(warning.confirmationField).toBe('confirmDuplicate')
+    }
+  })
+
+  it('detects duplicate warning from 200/special response body and throws DuplicateExpenseWarningError', async () => {
+    vi.spyOn(apiClient, 'post').mockResolvedValue({
+      warning: 'DUPLICATE_EXPENSE',
+      message: 'Possible match found.',
+      matchingExpense: {
+        id: 99,
+        categoryId: 4,
+        categoryName: 'Groceries',
+        amount: 25.0,
+        dueDate: '2025-02-15',
+      },
+      confirmationField: 'allowDuplicate',
+    })
+
+    const payload = { categoryId: 4, description: 'Groceries', amount: 25.0, dueDate: '2025-02-15' }
+    await expect(expenseService.create(payload)).rejects.toThrow(DuplicateExpenseWarningError)
+
+    try {
+      await expenseService.create(payload)
+    } catch (error) {
+      expect(error).toBeInstanceOf(DuplicateExpenseWarningError)
+      const warning = (error as DuplicateExpenseWarningError).warning
+      expect(warning.isDuplicate).toBe(true)
+      expect(warning.message).toBe('Possible match found.')
+      expect(warning.matchingExpense.id).toBe(99)
+      expect(warning.confirmationField).toBe('allowDuplicate')
+    }
+  })
+
+  it('creates expense with confirmation flag when resubmitted', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(expense)
+    const payload = {
+      categoryId: 3,
+      description: 'Electricity bill',
+      amount: 82.5,
+      dueDate: '2025-02-02',
+      confirmDuplicate: true,
+    }
+
+    const created = await expenseService.create(payload)
+    expect(created).toEqual(expense)
+    expect(post).toHaveBeenCalledWith('/v1/expenses', payload)
   })
 
   it('loads overdue and date-range statistics from their dedicated endpoints', async () => {

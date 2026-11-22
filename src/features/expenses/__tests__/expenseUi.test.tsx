@@ -9,6 +9,7 @@ import { ExpensesPage } from '../pages/ExpensesPage'
 import { useExpenses } from '../hooks/useExpenses'
 import { ExpenseStatisticsPage } from '../pages/ExpenseStatisticsPage'
 import { expense, expenseStatistics } from './expenseFixtures'
+import { DuplicateExpenseWarningError } from '../utils/duplicateWarning'
 
 const mocks = vi.hoisted(() => ({
   changeStatus: vi.fn(),
@@ -209,6 +210,178 @@ describe('expense UI', () => {
     await waitFor(() => expect(screen.getByRole('spinbutton', { name: /Amount/ })).toHaveValue(0))
     expect(mocks.createExpense).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows duplicate warning confirmation dialog, keeps form data intact, and allows cancel to edit', async () => {
+    const warningError = new DuplicateExpenseWarningError({
+      isDuplicate: true,
+      message: 'A duplicate expense already exists.',
+      matchingExpense: {
+        id: 55,
+        categoryId: 4,
+        categoryName: 'Groceries',
+        amount: 25,
+        dueDate: '2026-10-01',
+        description: 'Weekly groceries',
+        status: 'PAID',
+        paymentMethodName: 'Cash',
+      },
+      confirmationField: 'confirmDuplicate',
+    })
+    mocks.createExpense.mockRejectedValueOnce(warningError)
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/expenses/new']}>
+        <Routes>
+          <Route path="/expenses/new" element={<ExpenseFormPage />} />
+          <Route path="/expenses/:expenseId" element={<p>Saved expense</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Groceries' }))
+    await user.type(screen.getByRole('spinbutton', { name: /Amount/ }), '25')
+    await user.type(screen.getByLabelText(/Description/), 'Weekly groceries')
+    await user.click(screen.getByRole('button', { name: 'Record expense' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Possible duplicate expense')).toBeInTheDocument()
+    expect(within(dialog).getByText('$25.00')).toBeInTheDocument()
+    expect(within(dialog).getByText('Groceries')).toBeInTheDocument()
+    expect(within(dialog).getByText('Weekly groceries')).toBeInTheDocument()
+    expect(within(dialog).getByText('paid')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Edit / cancel' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Add anyway' })).toBeInTheDocument()
+
+    expect(screen.getByRole('spinbutton', { name: /Amount/ })).toHaveValue(25)
+    expect(screen.getByLabelText(/Description/)).toHaveValue('Weekly groceries')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Edit / cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    expect(screen.getByRole('button', { name: 'Category' })).toHaveTextContent('Groceries')
+    expect(screen.getByRole('spinbutton', { name: /Amount/ })).toHaveValue(25)
+    expect(screen.getByLabelText(/Description/)).toHaveValue('Weekly groceries')
+  })
+
+  it('confirms duplicate warning with "Add anyway", resubmits with confirmation field, and creates expense', async () => {
+    const warningError = new DuplicateExpenseWarningError({
+      isDuplicate: true,
+      message: 'Possible match found.',
+      matchingExpense: {
+        id: 77,
+        categoryId: 3,
+        categoryName: 'Utilities',
+        amount: 50,
+        dueDate: '2026-10-01',
+        description: 'Monthly electricity',
+      },
+      confirmationField: 'confirmDuplicate',
+    })
+    mocks.createExpense.mockRejectedValueOnce(warningError)
+    mocks.createExpense.mockResolvedValueOnce({ ...expense, id: 88 })
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/expenses/new']}>
+        <Routes>
+          <Route path="/expenses/new" element={<ExpenseFormPage />} />
+          <Route path="/expenses/:expenseId" element={<p>Saved expense 88</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Utilities' }))
+    await user.type(screen.getByRole('spinbutton', { name: /Amount/ }), '50')
+    await user.click(screen.getByRole('button', { name: 'Record expense' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Possible duplicate expense')).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Add anyway' }))
+
+    await waitFor(() => {
+      expect(mocks.createExpense).toHaveBeenLastCalledWith(expect.objectContaining({
+        categoryId: 3,
+        amount: 50,
+        confirmDuplicate: true,
+      }))
+    })
+
+    expect(await screen.findByText('Saved expense 88')).toBeInTheDocument()
+    expect(mocks.success).toHaveBeenCalledWith('Expense recorded.')
+  })
+
+  it('prevents accidental double clicks on form submission', async () => {
+    let resolveSave!: (value: typeof expense) => void
+    mocks.createExpense.mockReturnValueOnce(new Promise<typeof expense>((resolve) => { resolveSave = resolve }))
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/expenses/new']}>
+        <Routes>
+          <Route path="/expenses/new" element={<ExpenseFormPage />} />
+          <Route path="/expenses/:expenseId" element={<p>Saved expense</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Utilities' }))
+    await user.type(screen.getByRole('spinbutton', { name: /Amount/ }), '30')
+
+    const submitBtn = screen.getByRole('button', { name: 'Record expense' })
+    await user.click(submitBtn)
+    await user.click(submitBtn)
+
+    expect(mocks.createExpense).toHaveBeenCalledTimes(1)
+    await act(async () => { resolveSave(expense) })
+  })
+
+  it('prevents accidental double clicks on "Add anyway" in duplicate dialog', async () => {
+    const warningError = new DuplicateExpenseWarningError({
+      isDuplicate: true,
+      message: 'Possible match found.',
+      matchingExpense: {
+        id: 77,
+        categoryId: 3,
+        categoryName: 'Utilities',
+        amount: 50,
+        dueDate: '2026-10-01',
+      },
+      confirmationField: 'confirmDuplicate',
+    })
+    mocks.createExpense.mockRejectedValueOnce(warningError)
+    let resolveResubmit!: (value: typeof expense) => void
+    mocks.createExpense.mockReturnValueOnce(new Promise<typeof expense>((resolve) => { resolveResubmit = resolve }))
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/expenses/new']}>
+        <Routes>
+          <Route path="/expenses/new" element={<ExpenseFormPage />} />
+          <Route path="/expenses/:expenseId" element={<p>Saved expense</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    await user.click(screen.getByRole('treeitem', { name: 'Utilities' }))
+    await user.type(screen.getByRole('spinbutton', { name: /Amount/ }), '50')
+    await user.click(screen.getByRole('button', { name: 'Record expense' }))
+
+    const dialog = await screen.findByRole('dialog')
+    const addAnywayBtn = within(dialog).getByRole('button', { name: 'Add anyway' })
+
+    await user.click(addAnywayBtn)
+    await user.click(addAnywayBtn)
+
+    expect(mocks.createExpense).toHaveBeenCalledTimes(2)
+    await act(async () => { resolveResubmit(expense) })
+    expect(await screen.findByText('Saved expense')).toBeInTheDocument()
   })
 
   it('searches categories, focuses amount after selection, and defaults a blank description', async () => {

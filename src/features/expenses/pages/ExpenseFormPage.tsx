@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -16,6 +16,13 @@ import { expenseFormSchema, expenseToFormValues, toExpensePayload, type ExpenseF
 import { CategoryTreeSelect } from '@/features/categories/components/CategoryTreeSelect'
 import { PaymentMethodSelect } from '@/features/payment-methods/PaymentMethodSelect'
 import { usePaymentMethods } from '@/features/payment-methods/usePaymentMethods'
+import { DuplicateExpenseDialog } from '../components/DuplicateExpenseDialog'
+import {
+  DEFAULT_CONFIRMATION_FIELD,
+  isDuplicateExpenseWarning,
+  parseDuplicateWarning,
+} from '../utils/duplicateWarning'
+import type { DuplicateWarningResponse, ExpenseUpsertRequest } from '../types'
 
 function todayDate() {
   const today = new Date()
@@ -55,6 +62,17 @@ function ExpenseFormContent() {
   const createExpense = useCreateExpense()
   const updateExpense = useUpdateExpense()
   const [serverError, setServerError] = useState<string | null>(null)
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false)
+  const [isConfirmingDuplicate, setIsConfirmingDuplicate] = useState(false)
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    warning: DuplicateWarningResponse
+    payload: ExpenseUpsertRequest
+    addNew: boolean
+    categoryName?: string
+  } | null>(null)
+
+  const isSubmittingRef = useRef(false)
+
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseFormSchema),
     defaultValues: createDefaults(),
@@ -80,16 +98,23 @@ function ExpenseFormContent() {
   const showDueDate = isEditing || selectedType === 'SUBSCRIPTION'
 
   const submit = async (values: ExpenseFormValues, addNew = false) => {
+    if (isSubmittingRef.current) return
+    isSubmittingRef.current = true
+    setIsSubmittingManual(true)
     setServerError(null)
+
     if (paymentMethods.isPending || paymentMethods.error || !paymentMethods.data?.some((method) => method.active && method.id === values.paymentMethodId)) {
       form.setError('paymentMethodId', { message: 'Choose an active payment method before saving.' })
+      isSubmittingRef.current = false
+      setIsSubmittingManual(false)
       return
     }
     if (!showDueDate) values = { ...values, dueDate: values.paidDate || todayDate() }
+    const categoryName = categories.options.find((option) => option.id === values.categoryId)?.name
+      ?? (detail.data?.categoryId === values.categoryId ? detail.data.categoryName : '')
+    const payload = toExpensePayload(values, categoryName)
+
     try {
-      const categoryName = categories.options.find((option) => option.id === values.categoryId)?.name
-        ?? (detail.data?.categoryId === values.categoryId ? detail.data.categoryName : '')
-      const payload = toExpensePayload(values, categoryName)
       if (isEditing && expenseId) {
         const updated = await updateExpense.mutateAsync({ id: expenseId, payload })
         toast.success('Expense updated.')
@@ -105,7 +130,60 @@ function ExpenseFormContent() {
         }
       }
     } catch (error) {
+      if (!isEditing && (isDuplicateExpenseWarning(error) || parseDuplicateWarning(error))) {
+        const warning = isDuplicateExpenseWarning(error)
+          ? error.warning
+          : parseDuplicateWarning(error)!
+        setDuplicateWarning({
+          warning,
+          payload,
+          addNew,
+          categoryName,
+        })
+      } else {
+        setServerError(getApiErrorMessage(error, 'Could not save this expense.'))
+      }
+    } finally {
+      isSubmittingRef.current = false
+      setIsSubmittingManual(false)
+    }
+  }
+
+  const handleCancelDuplicate = () => {
+    setDuplicateWarning(null)
+  }
+
+  const handleConfirmDuplicate = async () => {
+    if (!duplicateWarning) return
+    if (isSubmittingRef.current) return
+    isSubmittingRef.current = true
+    setIsConfirmingDuplicate(true)
+    setServerError(null)
+
+    const confirmationField = duplicateWarning.warning.confirmationField || DEFAULT_CONFIRMATION_FIELD
+    const payloadWithConfirmation: ExpenseUpsertRequest = {
+      ...duplicateWarning.payload,
+      confirmDuplicate: true,
+      [confirmationField]: true,
+    }
+
+    try {
+      const created = await createExpense.mutateAsync(payloadWithConfirmation)
+      const wasAddNew = duplicateWarning.addNew
+      setDuplicateWarning(null)
+      toast.success('Expense recorded.')
+      if (wasAddNew) {
+        reset({ ...createDefaults(), paymentMethodId: paymentMethods.data?.find((method) => method.active && method.isDefault)?.id })
+        setTimeout(() => form.setFocus('categoryId'), 0)
+      } else {
+        navigate(`/expenses/${created.id}`, { state: location.state })
+      }
+    } catch (error) {
+      setDuplicateWarning(null)
       setServerError(getApiErrorMessage(error, 'Could not save this expense.'))
+    } finally {
+      isSubmittingRef.current = false
+      setIsConfirmingDuplicate(false)
     }
   }
 
@@ -118,7 +196,7 @@ function ExpenseFormContent() {
   }
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = form
-  const saveDisabled = isSubmitting || createExpense.isPending || updateExpense.isPending || categories.isLoading || !!categories.error
+  const saveDisabled = isSubmitting || isSubmittingManual || isConfirmingDuplicate || createExpense.isPending || updateExpense.isPending || categories.isLoading || !!categories.error
     || paymentMethods.isPending || !!paymentMethods.error || !paymentMethods.data?.some((method) => method.active && method.id === paymentMethodId)
 
   return (
@@ -211,6 +289,17 @@ function ExpenseFormContent() {
           </form>
         </CardContent>
       </Card>
+
+      {duplicateWarning && (
+        <DuplicateExpenseDialog
+          matchingExpense={duplicateWarning.warning.matchingExpense}
+          message={duplicateWarning.warning.message}
+          isSubmitting={isConfirmingDuplicate}
+          categoryFallbackName={duplicateWarning.categoryName}
+          onCancel={handleCancelDuplicate}
+          onConfirm={handleConfirmDuplicate}
+        />
+      )}
     </div>
   )
 }
