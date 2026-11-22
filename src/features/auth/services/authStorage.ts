@@ -3,6 +3,13 @@ import type { AuthUser } from '../types'
 const TOKEN_KEY = 'expense_wiki_auth_token'
 const USER_KEY = 'expense_wiki_auth_user'
 const TENANT_ID_KEY = 'expense_wiki_selected_tenant_id'
+const REMEMBERED_CREDENTIALS_KEY = 'expense_wiki_remembered_credentials'
+
+export interface RememberedCredentials {
+  email: string
+  password?: string
+  remember: boolean
+}
 
 export interface DecodedTokenPayload {
   sub?: string // email
@@ -97,6 +104,38 @@ export const authStorage = {
     try {
       localStorage.setItem(TENANT_ID_KEY, String(tenantId))
       localStorage.setItem('expense_wiki_active_tenant_id', String(tenantId))
+    } catch {
+      // ignore
+    }
+  },
+
+  getRememberedCredentials(): RememberedCredentials | null {
+    try {
+      const data = localStorage.getItem(REMEMBERED_CREDENTIALS_KEY)
+      return data ? JSON.parse(data) : null
+    } catch {
+      return null
+    }
+  },
+
+  setRememberedCredentials(credentials: { email: string; password?: string }): void {
+    try {
+      localStorage.setItem(
+        REMEMBERED_CREDENTIALS_KEY,
+        JSON.stringify({
+          email: credentials.email,
+          password: credentials.password || '',
+          remember: true,
+        }),
+      )
+    } catch {
+      // ignore
+    }
+  },
+
+  clearRememberedCredentials(): void {
+    try {
+      localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY)
     } catch {
       // ignore
     }

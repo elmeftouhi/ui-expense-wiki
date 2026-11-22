@@ -7,20 +7,21 @@ import {
   EyeOff,
   AlertCircle,
   ArrowRight,
-  Sparkles,
-  ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import { authStorage } from '../services/authStorage'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { ApiClientError } from '@/api/client'
 
 export const LoginPage: React.FC = () => {
   const { isAuthenticated, login } = useAuth()
   const navigate = useNavigate()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const savedCredentials = authStorage.getRememberedCredentials()
+  const [email, setEmail] = useState(() => savedCredentials?.email || '')
+  const [password, setPassword] = useState(() => savedCredentials?.password || '')
+  const [rememberCredentials, setRememberCredentials] = useState(() => Boolean(savedCredentials?.remember))
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -34,18 +35,25 @@ export const LoginPage: React.FC = () => {
     setError(null)
 
     if (!email.trim() || !password) {
-      setError('Please provide both email and password.')
+      setError('Please enter both email and password.')
       return
     }
 
     setIsSubmitting(true)
     try {
       await login({ email: email.trim(), password })
+
+      if (rememberCredentials) {
+        authStorage.setRememberedCredentials({ email: email.trim(), password })
+      } else {
+        authStorage.clearRememberedCredentials()
+      }
+
       navigate('/')
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.status === 401 || err.status === 400) {
-          setError('Invalid email or password. Please check your credentials.')
+          setError('Invalid email or password.')
         } else if (typeof err.data === 'object' && err.data !== null && 'message' in err.data) {
           setError(String((err.data as { message: string }).message))
         } else {
@@ -59,81 +67,77 @@ export const LoginPage: React.FC = () => {
     }
   }
 
-  const handleQuickDemoFill = () => {
-    setEmail('elmeftouhi@gmail.com')
-    setPassword('Password')
-    setError(null)
-  }
-
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-gradient-to-br from-background via-muted/30 to-primary/5 select-none">
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-sm space-y-6">
         {/* Brand Header */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-1">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 font-bold text-2xl mb-1">
             ₩
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             expense<span className="text-primary">.wiki</span>
           </h1>
-          <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-            Multi-Tenant Expense Management & Corporate Financial Intelligence
-          </p>
         </div>
 
         {/* Login Card */}
         <Card className="border-border/80 shadow-xl bg-card/95 backdrop-blur-sm">
-          <CardHeader className="space-y-1 pb-4">
+          <CardHeader className="pb-3 text-center">
             <CardTitle className="text-lg font-bold text-foreground">Sign In</CardTitle>
-            <CardDescription className="text-xs">
-              Enter your corporate credentials to access your tenant dashboard.
-            </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-4">
+          <CardContent>
             {error && (
               <div
                 role="alert"
-                className="flex items-start gap-2.5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs animate-in fade-in-50"
+                className="mb-4 flex items-start gap-2.5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs animate-in fade-in-50"
               >
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">{error}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} autoComplete="on" className="space-y-4">
               {/* Email field */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <label
+                  htmlFor="email"
+                  className="text-xs font-semibold text-foreground flex items-center gap-1.5"
+                >
                   <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Work Email</span>
+                  <span>Email</span>
                 </label>
                 <input
+                  id="email"
+                  name="email"
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  autoComplete="email"
+                  placeholder="name@example.com"
+                  autoComplete="email username"
                   className="w-full h-9 px-3 text-xs rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
                 />
               </div>
 
               {/* Password field */}
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span>Password</span>
-                  </label>
-                </div>
+                <label
+                  htmlFor="password"
+                  className="text-xs font-semibold text-foreground flex items-center gap-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Password</span>
+                </label>
                 <div className="relative">
                   <input
+                    id="password"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
+                    placeholder="••••••••"
                     autoComplete="current-password"
                     className="w-full h-9 pl-3 pr-9 text-xs rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
                   />
@@ -141,7 +145,7 @@ export const LoginPage: React.FC = () => {
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                    title={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
                       <EyeOff className="w-4 h-4" />
@@ -152,11 +156,29 @@ export const LoginPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Remember credentials */}
+              <div className="flex items-center justify-between pt-0.5">
+                <label
+                  htmlFor="remember-credentials"
+                  className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors select-none"
+                >
+                  <input
+                    type="checkbox"
+                    id="remember-credentials"
+                    name="remember"
+                    checked={rememberCredentials}
+                    onChange={(e) => setRememberCredentials(e.target.checked)}
+                    className="w-4 h-4 rounded border-input text-primary focus:ring-1 focus:ring-ring cursor-pointer"
+                  />
+                  <span>Remember credentials</span>
+                </label>
+              </div>
+
               {/* Submit button */}
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full h-9 text-xs font-medium gap-1.5 cursor-pointer"
+                className="w-full h-9 text-xs font-medium gap-1.5 cursor-pointer mt-1"
               >
                 {isSubmitting ? (
                   <>
@@ -165,31 +187,19 @@ export const LoginPage: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <span>Sign In to Workspace</span>
+                    <span>Sign In</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </Button>
             </form>
-
-            {/* Quick Demo Fill button */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={handleQuickDemoFill}
-                className="w-full py-1.5 px-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary text-[11px] font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-primary" />
-                <span>Fill Demo Credentials (admin@acme.com)</span>
-              </button>
-            </div>
           </CardContent>
         </Card>
 
         {/* Footer Link to Register */}
-        <div className="text-center space-y-2 text-xs text-muted-foreground">
+        <div className="text-center text-xs text-muted-foreground">
           <p>
-            Don&apos;t have an organization account?{' '}
+            Don&apos;t have an account?{' '}
             <Link
               to="/register"
               className="font-semibold text-primary hover:underline cursor-pointer"
@@ -197,10 +207,6 @@ export const LoginPage: React.FC = () => {
               Create Account
             </Link>
           </p>
-          <div className="flex items-center justify-center gap-1 text-[11px]">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Secure JWT Bearer Authentication • API v1</span>
-          </div>
         </div>
       </div>
     </div>
